@@ -23,13 +23,13 @@ The event will be held from October 19th-30th 2020.
 
 ## How to Submit a Project
 
-    #. Fork this repository
-    #. Add a folder for your proposed project
-    #. Add a readme detailing your proposal and any relevant code
-    #. Submit a PR to the main OpenMDAO fork of this repo
+1. Fork this repository
+2. Add a folder for your proposed project
+3. Add a readme detailing your proposal and any relevant code
+4. Submit a PR to the main OpenMDAO fork of this repo
 
 ## Rules and Requirements
 
-    #. All code (including all dependencies) must be open source 
-    #. Soft limit of 1500 lines of code (excluding dependencies)
-    #. You must provide a test showing the correct expected result
+- All code (including all dependencies) must be open source 
+- Soft limit of 1500 lines of code (excluding dependencies)
+- You must provide a test showing the correct expected result
