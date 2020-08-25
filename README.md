@@ -14,7 +14,7 @@ We don't care what field your problem is in, as long as it has at some of the fo
 
 **Derivatives**: differentiating a tricky component with weird sparsity or speeding up the performance of your existing derivatives implementation with advanced coloring features. 
 
-**Perforance**: identifying bottlenecks and speeding up code that is already implemented in OpenMDAO 
+**Performance**: identifying bottlenecks and speeding up code that is already implemented in OpenMDAO 
 
 **Numerical stability**: Improving the robustness of a nonlinear solve or optimization so that it gets a converged answer more frequently
 
