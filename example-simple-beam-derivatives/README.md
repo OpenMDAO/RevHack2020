@@ -4,6 +4,8 @@ This problem is fairly simple from an engineering standpoint,
 but the sparsity pattern for the analytic derivatives is moderately complex. 
 The code provided implements the nonlinear solver, but no derivatives are given. 
 
+![beam bending equations](beam_diagram.png)
+
 ## Request: 
 1) Add analytic derivatives using sparse partial derivatives and describe the process of determining the sparsity pattern.
 2) Compare compute cost computing total derivatives with FD partials, 
