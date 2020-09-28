@@ -2,9 +2,11 @@
 
 The CMA-ES (Covariance Matrix Adaptation Evolution Strategy) is an evolutionary algorithm for difficult non-linear non-convex black-box optimisation problems in continuous domain... 
 
-* [Inria Reference site](http://cma.gforge.inria.fr)
+* [INRIA reference site](http://cma.gforge.inria.fr)
 
 * [Python source code](https://github.com/CMA-ES/pycma)  
+
+* [API entry point](http://cma.gforge.inria.fr/apidocs-pycma/cma.html)
 
 ## Request:
 Initiate an OpenMDAO driver for the CMA-ES optimizer.
