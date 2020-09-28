@@ -6,7 +6,7 @@ from cmaes_driver import CMAESDriver
 
 class CMAESDriverTest(unittest.TestCase): 
 
-    # Shamelessly copied first three tests of openmdao/drivers/tests/test_genetic_algorithm_driver.py
+    # Shamelessly copied first of openmdao/drivers/tests/test_genetic_algorithm_driver.py
     # max_gen and pop_size options should be available with CMAES as well
     def test_simple_test_func(self):
         class MyComp(om.ExplicitComponent):
@@ -60,60 +60,3 @@ class CMAESDriverTest(unittest.TestCase):
         assert_near_equal(prob['px.x'][0], 0.2, 1e-4)
         assert_near_equal(prob['px.x'][1], -0.88653391, 1e-4)
 
-    def test_mixed_integer_branin(self):
-        prob = om.Problem()
-        model = prob.model
-
-        model.set_input_defaults('xC', 7.5)
-        model.set_input_defaults('xI', 0.0)
-
-        model.add_subsystem('comp', Branin(),
-                            promotes_inputs=[('x0', 'xI'), ('x1', 'xC')])
-
-        model.add_design_var('xI', lower=-5.0, upper=10.0)
-        model.add_design_var('xC', lower=0.0, upper=15.0)
-        model.add_objective('comp.f')
-
-        prob.driver = CMAESDriver(max_gen=75, pop_size=25)
-
-        prob.setup()
-        prob.run_driver()
-
-        if extra_prints:
-            print('comp.f', prob['comp.f'])
-
-        # Optimal solution
-        assert_near_equal(prob['comp.f'], 0.49399549, 1e-4)
-        self.assertTrue(int(prob['xI']) in [3, -3])
-
-    def test_mixed_integer_branin_discrete(self):
-        prob = om.Problem()
-        model = prob.model
-
-        indep = om.IndepVarComp()
-        indep.add_output('xC', val=7.5)
-        indep.add_discrete_output('xI', val=0)
-
-        model.add_subsystem('p', indep)
-        model.add_subsystem('comp', BraninDiscrete())
-
-        model.connect('p.xI', 'comp.x0')
-        model.connect('p.xC', 'comp.x1')
-
-        model.add_design_var('p.xI', lower=-5, upper=10)
-        model.add_design_var('p.xC', lower=0.0, upper=15.0)
-        model.add_objective('comp.f')
-
-        prob.driver = CMAESDriver(max_gen=75, pop_size=25)
-
-        prob.setup()
-        prob.run_driver()
-
-        if extra_prints:
-            print('comp.f', prob['comp.f'])
-            print('p.xI', prob['p.xI'])
-
-        # Optimal solution
-        assert_near_equal(prob['comp.f'], 0.49399549, 1e-4)
-        self.assertTrue(prob['p.xI'] in [3, -3])
-        self.assertTrue(isinstance(prob['p.xI'], int))
