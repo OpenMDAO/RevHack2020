@@ -7,6 +7,7 @@ from cmaes_driver import CMAESDriver
 class CMAESDriverTest(unittest.TestCase): 
 
     # Shamelessly copied first three tests of openmdao/drivers/tests/test_genetic_algorithm_driver.py
+    # max_gen and pop_size options should be available with CMAES as well
     def test_simple_test_func(self):
         class MyComp(om.ExplicitComponent):
 
@@ -44,10 +45,7 @@ class CMAESDriverTest(unittest.TestCase):
         model.add_objective('obj.f')
 
         prob.driver = CMAESDriver()
-        prob.driver.options['bits'] = {'px.x': 16}
         prob.driver.options['max_gen'] = 75
-
-        prob.driver._randomstate = 11
 
         prob.setup()
         prob.run_driver()
@@ -77,9 +75,6 @@ class CMAESDriverTest(unittest.TestCase):
         model.add_objective('comp.f')
 
         prob.driver = CMAESDriver(max_gen=75, pop_size=25)
-        prob.driver.options['bits'] = {'xC': 8}
-
-        prob.driver._randomstate = 1
 
         prob.setup()
         prob.run_driver()
@@ -110,9 +105,6 @@ class CMAESDriverTest(unittest.TestCase):
         model.add_objective('comp.f')
 
         prob.driver = CMAESDriver(max_gen=75, pop_size=25)
-        prob.driver.options['bits'] = {'p.xC': 8}
-
-        prob.driver._randomstate = 1
 
         prob.setup()
         prob.run_driver()

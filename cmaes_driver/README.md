@@ -8,8 +8,9 @@ The CMA-ES (Covariance Matrix Adaptation Evolution Strategy) is an evolutionary 
 
 ## Request:
 Initiate an OpenMDAO driver for the CMA-ES optimizer.
+
 As an evolutionary algorithm, the driver should be something along the lines of the SimpleGADriver. 
 We want to be able to run in parallel as well. 
 
-Would it be interesting to subclass or identify some common base class? 
+Would it be interesting to subclass or identify some common base class for evolutionary optimizers yet? 
 
