@@ -11,3 +11,6 @@
 
 ## Request:
 * Implement an unsteady VLM analysis with OAS (e.g., see the attached thesis)
+
+## Stretch goal:
+* Carry out an optimization with unsteady analyses.
