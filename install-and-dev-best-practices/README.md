@@ -2,7 +2,7 @@
 
 ## Background
 * In the OpenMDAO docs, the instructions (unless I'm missing something) are simply to use Anaconda and pip install.
-* For people (undergraduate/graduate students, researchers, engineers in the industry, instructors, etc.) who are developing reasonably elaborate applications (i.e., not just using example scripts), this is not enough information.
+* For people (undergraduate/graduate students, researchers, engineers in the industry, instructors, etc.) who are developing reasonably elaborate applications (i.e., beyond using example scripts), this is not enough information.
 * I don't think I've ever used OpenMDAO or OpenAeroStruct (OAS) in a project where at some point I didn't go in the source code and make modifications for debugging or development.
 * I'm using OAS as an example here, but this could apply for other things (Dymos, pyCycle, etc.)
 * For people who already have a lot on their plate (figuring out their physics/analysis, working on challenging design issues, juggling other project requirements, other courses, etc.) figuring out how to proceed on their own is quite prohibitive and frustrating (speaking as a grad student using openMDAO for 5 years and interacting with students as a teaching assistant and with external collaborators in industry and other universities).
