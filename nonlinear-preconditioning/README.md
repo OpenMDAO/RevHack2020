@@ -2,26 +2,28 @@
 
 ## Background
 
-Similar to linear preconditioning, nonlinear preconditioning methods try to change the nonlinear system to a different nonlinear system that has the same solution as the original system, but is easier to solve.
+Similar to linear preconditioning, nonlinear preconditioning methods change the nonlinear system to a different nonlinear system that has the same solution as the original system, but is easier to solve.
 It is well known for the Newton's method to converge rapidly once the state is close to the final solution; however, far away from the solution, the method suffers from slow convergence, or may even stall due to local minima.
 This is caused by multiple mechanisms, but the mechanism we focus on resolving is due to unbalanced nonlinearities, where a subset of the domain is slowing down convergence in the whole system due to the increased nonlinearity it has compared to the rest of the domain.
 The main idea in using nonlinear preconditioning in this context is to balance these imbalanced nonlinearities to accelerate Newton's method even when the initial guess is not near the final solution.
 
 The family of nonlinear preconditioning methods we are interested in for proposal are based on domain decomposition; specifically, they are based on the additive or multiplicative Schwarz methods.
-Due to the "component" approach in OpenMDAO, there is a natural way to decompose the solution into subdomains, where the smallest subdomain is a component, but we can also consider multiple components together for a single subdomain.
+Due to the components acting as building blocks in OpenMDAO, there is a natural way to decompose the problems into subdomains, where the smallest subdomain is a component, but we can also consider multiple components together for a single subdomain.
 
-The original additive Schwarz preconditioned inexact Newton (ASPIN) method [1] was introduced as a nonlinear preconditioning method for parallel CFD simulations, where the parallel domain decomposition provides a natural application to the domain decomposition used for nonlinear preconditioning.
-With this method, the authors use the additive Schwarz method with overlap to build a preconditioned nonlinear system, and use an inexact Jacobian to solve the resulting system with the Newton's method, hence the name "inexact Newton". 
+The original additive Schwarz preconditioned inexact Newton (ASPIN) method [1] was introduced as a nonlinear preconditioning method for parallel CFD simulations, where the domain-based parallelism provides a natural domain decomposition used for nonlinear preconditioning.
+With this method, the authors use the additive Schwarz method with overlap to build a preconditioned nonlinear system, and use an inexact Jacobian to solve the resulting system with the Newton's method, hence the name "inexact Newton".
+This algorithm involves first solving the nonlinear problem separately on all subdomains given the current state, and the preconditioned nonlinear system defines its residuals as the subdomain updates.
+The solution of this modified nonlinear system is achieved when the subdomain solution updates are zero, which is also equivalent to the solution of the original nonlinear system.
 
 While the additive Schwarz version works well for parallel computations, where we prefer to do as many computations as possible with minimal communication, for a typical OpenMDAO model, there are multiple low-cost components that perform the computations in serial. Due to this property, the multiplicative Schwarz variant is more useful, where updated states from previous components are used for the next component.
-In this context, additive Schwarz can be seen as a block-Jacobi approach, where multiplicative Schwarz is a block-Gauss--Seidel approach.
+In this context, additive Schwarz can be seen as a block-Jacobi approach, where multiplicative Schwarz is a block-Gauss–Seidel approach.
 
 The multiplicative Schwarz preconditioned inexact Newton (MSPIN) method was introduced in [2], and this approach is the preferred method for serial computations and is expected to yield better convergence rates, as long as the computations are not overwhelmed by parallel communication.
-In this paper, the authors again used an inexact Jacobian to solve the resulting nonlinear system; however, compared to the ASPIN paper, this paper does not include any overlap between the sub-domains.
 Since the models we are interested in for now are purely serial models, the MSPIN approach seems like a natural choice for us.
+In this paper, the authors again used an inexact Jacobian to solve the resulting nonlinear system; however, compared to the ASPIN paper, this paper does not include any overlap between the sub-domains.
 
 Finally, the hierarchical Newton method currently used in OpenMDAO can also be formulated as a nonlinear preconditioning method similar to these; however, there a subtle differences in the final nonlinear system. 
-In my notes, I have shown that the hierarchical Newton method approaches the multiplicative Schwarz based nonlinear preconditioning as we approach the solution; however, the differences between the methods can be large when we are far away from the solution, and this is the main part of the nonlinear convergence we want to accelerate.
+In my notes, I have shown that the hierarchical Newton method approaches the multiplicative Schwarz based nonlinear preconditioning as we approach the solution; however, the differences between the methods can be large when we are far away from the solution, and this is the main region of the solution space where we want to accelerate convergence.
 Therefore, I see a benefit in at least trying the additive and multiplicative Schwarz based nonlinear preconditioning in OpenMDAO models.
 
 ## Request
@@ -55,8 +57,8 @@ While both of these derivations in the paper are done for a 2-component system, 
 In the appendix of [2], the authors present the Jacobian for an N-component MSPIN method, and the N-component ASPIN Jacobian is easy to formulate. 
 Similarly, we can modify these Jacobian formulations to get the respective N-component ASPEN and MSPEN variants.
 
-The notation used in [1] and [2] is maybe cleaner and easier to understand, but I do not like this notation. 
-A better notation is used in [3]; however, they also changed the preconditioned nonlinear residual, and the derivation is only done for the additive version, and not the multiplicative version, though this is easy to extend.
+The notation used in [1] and [2] is maybe cleaner and easier to understand, but I do not like this notation because they do not fully specify at what states the Jacobian matrices are evaluated, and this formulation becomes a bit tedious when we include overlap. 
+A better notation is used in [3]; however, they also changed how the preconditioned nonlinear residual is defined (they are equivalent mathematically), and the derivation is only done for the additive Schwarz version, and not the multiplicative version, though this is easy to extend.
 In [3], g and h refer to the solution operators defined on the subdomains directly, whereas in [1] and [2], g and h terms are the negative deltas to the baseline solution u and v to solve the subdomain systems.
 
 Finally, because we do not use any overlap for now, we do not need to specify how the overlap is formulated.
@@ -68,12 +70,12 @@ However, since we do not have any overlap in these simple examples in the first 
 ## Test problems
 
 The simplest test case for these methods is the 2-variable nonlinear system introduced in Section 3.2 in [2].
-Using this example, the authors formulated the residual contours to visualize how the nonlinear preconditioning turns a complex nonlinear surface into an elliptical one, where the Newton's method is expected to perform better.
-One basic check is that the both MSPEN and ASPEN residuals do not get affected by the inexact Jacobian, and therefore, to validate our implementation, we can try to recreate the same plots as in the paper.
+Using this example, the authors plotted the residual contours to visualize how the nonlinear preconditioning turns a complex nonlinear surface into an elliptical one, where the Newton's method is expected to perform better.
+Both MSPEN and ASPEN residuals do not get affected by the inexact Jacobian, and therefore, to validate our implementation, we can try to recreate the same plots as in the paper.
 Furthermore, I have modified the hierarchical Newton to have a similar notation in my notes, so that we can also plot the resulting preconditioned nonlinear system contours and compare different approaches.
 Both MSPEN and ASPEN require a good amount of extra computations than hierarchical Newton, and therefore we expect the residual contours to be considerably better than the contours from hierarchical Newton for them to make sense in terms of performance.
 
-Besides this simple test, I plan on cleaning up the scalable test problem developed by Sham in [4].
+Besides this simple test, I plan on cleaning up the scalable test problem developed by Chauhan et al. in [4].
 Finally, we can try the method on a difficult pyCycle or OpenConcept model.
 I will provide the OpenMDAO models for all of these tests, although the 2-component test case is extremely easy to code, so feel free to create your implementation of it.
 
