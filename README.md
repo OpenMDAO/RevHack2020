@@ -5,61 +5,65 @@ This is the shared repository for OpenMDAO RevHack 2020.
 RevHack is a reverse hackathon where the OM users propose problems to be solved in OpenMDAO and then the development team tries to solve them! 
 The motivation for the dev team is to gain a better understanding of the use cases that our users are struggling with. 
 
-Special thanks go to @shamsheersc19 for submitting half of the total ideas, and more importantly for taking the time off-line to talk through some of the details with the one of the dev team members. 
-As a long time user of OpenMDAO with a wide range of experiences using it in the classroom, in his own research, and advising others on how to do the same, Shamsheer gave us some important feedback about some serious usability issues that the community faces when adopting OpenMDAO. 
-Shamsheer's insights gave us some new perspective on feature development and general product development strategy, and in particular where there are some holes. 
+The dev team goal for this hackathon was to get a better idea of the kinds of challenges our users were struggling with. 
+We noticed three general solution approaches that collectively would span the entire set of problems submitted.
 
-The original stated goal for the hackathon was to encourage adoption of the advanced features in OpenMDAO (e.g. analytic derivatives or MPI parallelism).
-However, when we filtered the suggested problems through a usability lens it became clear that many users are wrestling with a different class of problems. 
-In retrospect, Dr. Garett Barter's talk ["Growing Pains with OpenMDAO"][3], from the 2019 OpenMDAO workshop brought up a lot of the same issues. 
+## Common solution approaches that will be useful to users
+* Using OpenMDAO as a compute engine, and writing your own run-scripts around it
+* Using sub-problems in OpenMDAO
+* Building unsteady/transient analysis in OpenMDAO
+
+## Why aren't these solution approaches in the docs already? 
+Good question! 
+The ability to use OpenMDAO these ways is part of the design intent of the framework, 
+which is why we already had the features in place to quickly implement each of these approaches. 
+However, this way of executing things isn't the way that the NASA users typically do things,
+so we simply didn't think to document them. 
+
+Though we have not typically run OpenMDAO this way in-house, 
+these are still perfectly good ways of using OpenMDAO! 
+In fact, we will probably adopt at least some of these things into our common use going forward. 
+We are grateful to the efforts of those who submitted projects for helping us see alternate ways. 
 
 
-## Dev Team Current 2020 Retrospective on OpenMDAO
-OpenMDAO V3 has introduced a lot of refinement and performance gains to the core platform. 
-These important things polished the framework into an effective computational platform for building new models and generalized modeling libraries on top of. 
+## Is there an "OpenMDAO Way"?
+OpenMDAO V3 has introduced a lot of API refinement and performance gains to the platform. 
+One effect of these improvements is a new usage of OpenMDAO as low-level computational layer for building new generalized modeling libraries. 
 There are some notable successes that heavily exploit the analytic derivative features in OpenMDAO: [OpenAeroStruct][1] (3 different revhack submissions include it!), [pyCycle][4], [Dymos][1], [OpenConcept][5].
-These codes all adopt a new coding paradigm that OpenMDAO introduces, in order to exploit these features to great effect.
+These codes all adopt coding style with OpenMDAO as the top level execution manager and a single level monolithic optimization. 
+Is this the "OpenMDAO way"? 
+It is at least one way, but it's certainly not the only way. 
 
-However, many users are are struggling to fit their applications into this new coding paradigm. 
-Things like nested optimization, greater optimizer variety, and wrapper scripts with for-loops and flexible logic are tougher fits. 
-Broadly, there seems to be usability problem that stems from a combination of OpenMDAO's new coding paradigm, 
-and users being unsure how to map their desired techniques to it. 
+There are definitely times when it makes sense to have something else (i.e. not OpenMDAO) be the top level execution manager. 
+Not every problem is most effectively solved as a single monolithic block with a single optimizer. 
+So we'll show you how we'd implement these thins using OpenMDAO as a part of a larger whole. 
 
-Without a doubt, OpenMDAO is highly tailored applications with analytic derivatives. 
-That is not going to change. 
-We still think that you should strongly consider using them. 
-However, it shouldn't be a binary choice: OpenMDAO way or the old way. 
-So there is a lot of value in helping users see clearer ways to map their desired approaches into OpenMDAO. 
-
-## The NEW goal for OpenDMAO RevHack2020
-To demonstrate some different approaches to using OpenMDAO as a part of a larger, more customized run time environment. 
-We want to show you a different perspective where OpenMDAO is more of a low-level compute engine that you build on top of. 
-We want to present an alternative to viewing OpenMDAO as the top of the stack! 
+Moving forward we'd like to have OpenMDAO be seen as one tool in your tool box, instead of some kind of super-multi-tool that should be the only one you need! 
 
 
 # The OpenMDAO RevHack 2020 Development Plan
 
-## We've rejected 2 ideas
-* ~~Write a new solver that provides nonlinear preconditioning (@anilyil)~~
-* ~~Create a recommended installation procedure for researchers who want access to OM source code (@shamsheersc19)~~
+There were 8 ideas submitted. 
+We're rejecting 2 and accepting the remaining 6. 
+Throughout the next two weeks we'll develop some general tools to tackle these 6 problems, 
+then use them to implement specific solutions for each problem. 
+For a few of the problems, we think there are multiple good ways to tackle it and (time permitting) we'll implement multiple solutions. 
 
-These two are still awesome ideas, 
-but we deemed them to be outside the scope for the new goals of the reverse hackathon.
-We'll still take a look at them, but not during this activity. 
-
-## We've accepted 6 ideas
+## 6 accepted ideas
 * Build an unsteady VLM simulation using an [OpenAeroStruct][1] model as a base (@shamsheersc19)
 * Integrate an [OpenAeroStruct][1] analysis into a [Dymos][2] trajectory analysis model (@shamsheersc19)
 * Use the analytic derivatives in [OpenAeroStruct][1] to optimize an aircraft subject stability constraints (achase90)
 * Create a [Dymos][2] implementation of an eVTOL takeoff optimization that already exists as a explicit time integration implementation in OpenMDAO (@shamsheersc19)
 * Demonstrate recommended nested optimization approach (@johnjasa)
-* Write a new driver that uses the CMA-ES optimizer (@relf)
+* Optimize an OpenMDAO model with [CMA-ES][10] optimizer (@relf)
 
-There are some common themes that emerge when you look at all 6 together. 
-We'll present them here as separate themes, but really they all overlap. 
-When we get down to implementing solutions to these 6 ideas, we'll take parts from all these themes. 
-You should look into the folder associated with each theme for a more in depth discussion of it, and clear links to where it applies to various solution. 
+## 2 rejected ideas
+* ~~Write a new solver that provides nonlinear preconditioning (@anilyil)~~
+* ~~Create a recommended installation procedure for researchers who want access to OM source code (@shamsheersc19)~~
 
+These two are still awesome ideas, 
+but we deemed them to be outside the scope for the reverse hackathon.
+We'll still take a look at them, but not during this activity. 
 
 
 ### Building unsteady/transient analysis in OpenMDAO: 
@@ -75,25 +79,6 @@ You're more likely to use a hand coded for-loop, or scipy's [odeint][6] or [solv
 *We are going to show you both ways and compare them. 
 We will also provide our opinion for when you should choose one way or the other* 
 
-### Using OpenMDAO as a compute engine, and writing your own run-scripts around it
-OpenMDAO doesn't have to be on top! 
-It may be surprising to you, since we admittedly don't show you any examples of this in our docs, but this is actually an expected use for OpenMDAO. 
-In fact, we've even added a [matrix-free total derivative feature][8] that lets you efficiently propagate analytic derivatives through an entire OpenMDAO model for situations where you want to build a for-loop around it, or tie it into some larger derivative framework. 
-We'll make specific use of the matrix-free total derivatives when we implement a for-loop style time integration. 
-
-Here is an interesting thought experiment: Does OpenMDAO even need drivers? What if we didn't have them at all, and users were responsible to linking their problems into the optimization library of their choice? 
-If you like our Driver interface, don't worry; we are not getting rid of it. 
-None the less, its interesting to realize that the driver interface (and all of the optimizers that follow from it) are not critical to OpenMDAO (except that the "O" in the name wouldn't make much sense any more). 
-This comes into play in the CMA-ES idea for RevHack2020, but [Dr. Barter's 2019 talk][3] also suggested that NL-opt would be useful to them. 
-
-Driver's are useful, because the handle a lot of details about optimizer integration for you. 
-For instance, they cache any linear derivatives so you only compute them once and they handle details about broadcasting design variables to all processes under MPI. 
-Unfortunately, their generality also makes them complex and in some cases hard to debug. 
-In our opinion, its 100% valid for you to not use Drivers at all (especailly if you don't need the more advanced features). 
-
-*We show you run script that wraps a stand-alone OpenMDAO model into the CMA-ES native interface.*
-
-We'd love you input on if you prefer this way of doing things over leaving OpenMDAO on top. 
 
 ### Using sub-problems in OpenMDAO
 This topic has come up a a bunch of times over the years. 
@@ -135,7 +120,7 @@ Depending on its use, we'll consider adding it as to the main repo in the future
 
 
 
-
+[0]: https://openmdao.org/2020-openmdao-reverse-hackathon/
 [1]: https://github.com/mdolab/OpenAeroStruct
 [2]: https://github.com/OpenMDAO/dymos
 [3]: https://www.youtube.com/watch?v=OlL1QmtLQQw&list=PLPusXFXT29sXIwZfZf3tLs3wr1sPk7d5J&index=6
@@ -145,3 +130,4 @@ Depending on its use, we'll consider adding it as to the main repo in the future
 [7]: https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.solve_ivp.html#scipy.integrate.solve_ivp
 [8]: http://openmdao.org/twodocs/versions/3.4.0/features/core_features/working_with_derivatives/total_compute_jacvec_product.html
 [9]: http://openmdao.org/pubs/Gray_Moore_Hearn_Naylor-_2013_-Benchmarking.pdf
+[10]: https://github.com/CMA-ES/pycma
