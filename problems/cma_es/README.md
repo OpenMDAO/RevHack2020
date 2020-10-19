@@ -16,3 +16,6 @@ We want to be able to run in parallel as well.
 
 Would it be interesting to subclass or identify some common base class for evolutionary optimizers yet? 
 
+## Solutions:
+
+1. Custom run script using the native CMA-ES optimizer
