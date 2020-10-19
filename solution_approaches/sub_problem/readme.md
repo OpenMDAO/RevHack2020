@@ -5,6 +5,17 @@ The most common use case is for nested optimization, either for formal
 MDO architectures or more custom one-off solutions. 
 But, as you'll see there are other good use cases for it too. 
 
+## What is a sub-problem? 
+A simple answer is this: a sub-problem is a `Problem` instance that gets embedded within the `model` of another OpenMDAO problem. 
+
+The reality is just a little more complex. the `Problem` class in OpenMDAO does not support the same interface as the `Component` class. 
+The `Component` interface is needed to be able to add something to a `model`, so in order to make sub-problems work you have to somehow add this interface to your sub-problem. 
+
+The simple way to do this is to embed the sub-problem inside a component wrapper, like this: 
+
+![cartoon diagram of a sub-problem](sub_problem_cartoon.png)
+
+
 ## Nested Optimization can be done with OpenMDAO V3! 
 I know ... you don't believe me.
 That is understandable.  
