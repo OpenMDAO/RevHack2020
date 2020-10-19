@@ -13,7 +13,7 @@ The `Component` interface is needed to be able to add something to a `model`, so
 
 The simple way to do this is to embed the sub-problem inside a component wrapper, like this: 
 
-![cartoon diagram of a sub-problem](sub_problem_cartoon.png =800x)
+![cartoon diagram of a sub-problem](sub_problem_cartoon.png | width=100)
 
 
 ## Nested Optimization can be done with OpenMDAO V3! 
