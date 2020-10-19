@@ -1,6 +1,7 @@
+
 # OpenMDAO RevHack 2020
 
-This is the shared repository for OpenMDAO RevHack 2020. 
+## Watch this repo to get notifications as we push updates throughout the day during the two weeks of RevHack2020
 
 RevHack is a reverse hackathon where the OM users propose problems to be solved in OpenMDAO and then the development team tries to solve them! 
 The motivation for the dev team is to gain a better understanding of the use cases that our users are struggling with. 
