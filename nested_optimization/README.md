@@ -18,7 +18,7 @@ Here is a non-exhaustive list of cases:
 
 ## Example simplified code
 
-[Actual use cases within WISDEM that involve nested optimization are quite complicated](https://github.com/WISDEM/WISDEM/blob/develop/wisdem/servose/servose.py#L184), so we have developed a simple set of components that can represent a few different cases.
+[Actual use cases within WISDEM that involve nested optimization are quite complicated](https://github.com/WISDEM/WISDEM/blob/b4563abea6e739930c056d85204f2037a41ea3d5/wisdem/servose/servose.py#L184), so we have developed a simple set of components that can represent a few different cases.
 The physics and equations represented in these components are completely fabricated and are not representations of the exact problems we're trying to solve.
 We wanted to make them simple enough to quickly understand.
 
