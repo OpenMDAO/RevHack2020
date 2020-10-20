@@ -14,9 +14,9 @@ class VSP(om.ExplicitComponent):
         self.vert_tail_name = vert_tail_name
         self.wing_name = wing_name
 
-        self.wing_id = vsp.FindGeomsWithName(name=self.wing_name)[0]
-        self.horiz_tail_id = vsp.FindGeomsWithName(name=self.wing_name)[0]
-        self.vert_tail_id = vsp.FindGeomsWithName(name=self.wing_name)[0]
+        self.wing_id = vsp.FindGeomsWithName(self.wing_name)[0]
+        self.horiz_tail_id = vsp.FindGeomsWithName(self.horiz_tail_name)[0]
+        self.vert_tail_id = vsp.FindGeomsWithName(self.vert_tail_name)[0]
 
     def setup(self):
         self.add_input('wing_cord', val=59.05128,)
@@ -37,17 +37,23 @@ class VSP(om.ExplicitComponent):
 
         # run degen geom to get measurements
         dg:degen_geom.DegenGeomMgr = vsp.run_degen_geom(set_index=vsp.SET_ALL)
+        obj_dict = {p.name:p for p in dg.get_all_objs()}
 
         # pull measurements out of degen_geom api
-        degen_obj: degen_geom.DegenGeom = list(dg.get_degen_obj_by_name(self.wing_name)[0].copies.values())[0][0]
+        #degen_obj: degen_geom.DegenGeom = list(dg.get_degen_obj_by_name(self.wing_name)[0].copies.values())[0][0]
+        degen_obj: degen_geom.DegenGeom = obj_dict[self.wing_name]
         wing_cuts = self.vsp_to_cuts(degen_obj, plane='xz')
         wing_pts = self.vsp_to_point_cloud(degen_obj)
 
-        degen_obj: degen_geom.DegenGeom = list(dg.get_degen_obj_by_name(self.horiz_tail_name)[0].copies.values())[0][0]
+        ##degen_obj: degen_geom.DegenGeom = list(dg.get_degen_obj_by_name(self.horiz_tail_name)[0].copies.values())[0][0]
+        #degen_obj: degen_geom.DegenGeom = list(dg.FindGeomsWithName(self.horiz_tail_name)[0])[0][0]
+        degen_obj: degen_geom.DegenGeom = obj_dict[self.horiz_tail_name]
         horiz_tail_cuts = self.vsp_to_cuts(degen_obj, plane='xz')
         horiz_tail_pts = self.vsp_to_point_cloud(degen_obj)
 
-        degen_obj: degen_geom.DegenGeom = list(dg.get_degen_obj_by_name(self.vert_tail_name)[0].copies.values())[0][0]
+        ##degen_obj: degen_geom.DegenGeom = list(dg.get_degen_obj_by_name(self.vert_tail_name)[0].copies.values())[0][0]
+        #degen_obj: degen_geom.DegenGeom = list(dg.FindGeomsWithName(self.vert_tail_name)[0])[0][0]
+        degen_obj: degen_geom.DegenGeom = obj_dict[self.vert_tail_name]
         vert_tail_cuts = self.vsp_to_cuts(degen_obj, plane='xy')
         vert_tail_pts = self.vsp_to_point_cloud(degen_obj)
 
