@@ -1,16 +1,57 @@
-# How to solve these eVTOL takeoff trajectory optimization problems with Dymos?
+# Different Approaches to Time Integration in OpenMDAO
 
-## Background:
-* I implemented an approach to solve takeoff trajectory optimization problems for an eVTOL configuration with OpenMDAO.
-* The approach uses explicit time integration, the complex-step derivative approximation, KS functions for constraint aggregation, OpenMDAO's B-spline component, and other such methods.
-* The code can be found here https://bitbucket.org/shamsheersc19/tilt_wing_evtol_takeoff
-* The script with the models is around 600 lines and the run-script is around 150 lines (Python 2; OpenMDAO v2.6.0). It also has a readme and comments explaining how to use it (please let me know if anything needs clarification).
-* The models have simple analytic expressions.
-* The journal paper (with optimization problem formulations and results) can be found here
-https://www.researchgate.net/publication/337259571_Tilt-Wing_eVTOL_Takeoff_Trajectory_Optimization
+* OpenMDAO is not, out-of-the-box, set up to to tackle optimization problems involving dynamics.
+* Problem has been accepted as part of the reverse hackathon so that we can demonstrate multiple ways of approaching dynamic optimization problems in OpenMDAO
 
-## Request:
-1) How do I implement this using Dymos?
+## Implementation using Dymos
+
+[Dymos](https://github.com/OpenMDAO/dymos) is an OpenMDAO-based library for analysis and optimization of dynamic systems.
+A user provides a set of ordinary differential equations (ODE) in the form of an OpenMDAO system.
+Dymos can then be used to perform simple time integration of the system, or to optimize it using shooting methods or pseudospectral optimal control techniques.
+
+## A nested-problem approach utilizing state-transformation matrices
+
+A second approach used to tackle this integraiton will be to build a wrapper around a standard numerical integration tool.
+But in general, numerical integrators do not allow one to propagate derivatives of the final state across the time integration.
+How does one determine the sensitivity of the final state to the initial state and controls when using something like [scipy.integrate.solve_ivp](https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.solve_ivp.html)?
+Finite differencing can be utilized, but this means re-propagating the trajectory each time a design variable is perturbed, making the calculation extremely expensive.
+In the approach used here, we will use OpenMDAO to propagate a "state transition matrix" along-side the user's equations of motion.
+The state-transition matrix is a matrix which, multiplied by the initial state, yields the final state.
+
+\begin{align}
+    \bar{x}_f &= \left[ \phi \right] \bar{x}_0
+\end{align}
+
+That is, the state transition matrix ($\phi$) is the jacobian matrix of the final state w.r.t. the initial state.
+An excellent discussion of the state transition matrix is provided by [Pellegrini and Russell](https://www.researchgate.net/publication/281440699_On_the_Accuracy_of_Trajectory_State-Transition_Matrices).
+
+## Implementation using a manually-coded numerical integration technique
+
+A third option is to implement a numerical propagation technique as a for loop within a component and propagate the state and the derivatives through each step.
+
+## Impact of Variable Time-Step Integraiton
+
+Dymos uses an implicit approach that assumes that the dynamics can be satisfied given a discretizaiton (the collocation grid).
+The other two approaches tested here should provide the behavior of an explicit time-integration.
+That is, if the time-step is insufficient, there will be some error in the propagation, but the derivatives across the propagation will hold true.
+Unfortunately, as shown by Pellegrini and Russell, this is not the case for the state transition matrix approach.
+Higher-order terms arise due to the changing of the timestep that are not captured by the state transition matrix.
+One can either accept these errors, or resort to fixed-time-step integraiton techniques.
+
+# The eVTOL Trajectory Optimization Problem
+
+Originally proposed by [shamsheersc19](https://github.com/shamsheersc19)
+
+## Background
+
+* This is the trajectory optimization of an electric vertical take-off and landing (eVTOL) aircraft with OpenMDAO.
+* The original implementation can be found [here](https://bitbucket.org/shamsheersc19/tilt_wing_evtol_takeoff).
+* The problem formulation and results are published [here](https://www.researchgate.net/publication/337259571_Tilt-Wing_eVTOL_Takeoff_Trajectory_Optimization)
+* The model, as given, uses complex-step derivative approximation.
+
+## Request
+
+1) How can this problem be implemented in Dymos?
 2) What are the advantages over the current implementation?
 
 ## Stretch goals (or easier alternatives to the above request):
