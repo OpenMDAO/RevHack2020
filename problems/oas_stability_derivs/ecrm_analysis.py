@@ -70,7 +70,7 @@ horiz_tail_surface = {
     # the total CL and CD.
     # These CL0 and CD0 values do not vary wrt alpha.
     'CL0': 0.0,  # CL of the surface at alpha=0
-    'CD0': 0.0,  # CD of the surface at alpha=0
+    'CD0': 0.01,  # CD of the surface at alpha=0
     'fem_origin': 0.35,
     # Airfoil properties for viscous drag calculation
     'k_lam': 0.05,  # percentage of chord with laminar
@@ -99,7 +99,7 @@ vert_tail_surface = {
     # the total CL and CD.
     # These CL0 and CD0 values do not vary wrt alpha.
     'CL0': 0.0,  # CL of the surface at alpha=0
-    'CD0': 0.0,  # CD of the surface at alpha=0
+    'CD0': 0.01,  # CD of the surface at alpha=0
     'fem_origin': 0.35,
     # Airfoil properties for viscous drag calculation
     'k_lam': 0.05,  # percentage of chord with laminar
@@ -111,7 +111,7 @@ vert_tail_surface = {
     'with_wave': False,
 }
 
-surfaces = [wing_surface, horiz_tail_surface]#, vert_tail_surface]
+surfaces = [wing_surface, horiz_tail_surface, vert_tail_surface]
 
 prob = om.Problem()
 model = prob.model
