@@ -15,8 +15,8 @@ class VSP(om.ExplicitComponent):
         self.wing_name = wing_name
 
         self.wing_id = vsp.FindGeomsWithName(self.wing_name)[0]
-        self.horiz_tail_id = vsp.FindGeomsWithName(self.wing_name)[0]
-        self.vert_tail_id = vsp.FindGeomsWithName(self.wing_name)[0]
+        self.horiz_tail_id = vsp.FindGeomsWithName(self.horiz_tail_name)[0]
+        self.vert_tail_id = vsp.FindGeomsWithName(self.vert_tail_name)[0]
 
     def setup(self):
         self.add_input('wing_cord', val=59.05128,)
