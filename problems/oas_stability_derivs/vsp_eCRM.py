@@ -1,18 +1,29 @@
+"""
+OpenMDAO component wrapper for a VSP model of a modified CRM (eCRM-001) that will be used to demonstrate the
+computation and use of stability derivatives in a design problem.
+"""
+import itertools
+import pickle
+
+import numpy as np
+
 import openmdao.api as om
-from openmdao.api import DirectSolver, NewtonSolver, BoundsEnforceLS
+
 import openvsp as vsp
 import degen_geom
-import numpy as np
-import itertools
 
 
-class VSP(om.ExplicitComponent):
+class VSPeCRM(om.ExplicitComponent):
 
     def __init__(self, horiz_tail_name, vert_tail_name, wing_name):
         super().__init__()
         self.horiz_tail_name = horiz_tail_name
         self.vert_tail_name = vert_tail_name
         self.wing_name = wing_name
+
+        # Read the geometry.
+        vsp_file = 'eCRM-001.1_wing_tail.vsp3'
+        vsp.ReadVSPFile(vsp_file)
 
         self.wing_id = vsp.FindGeomsWithName(self.wing_name)[0]
         self.horiz_tail_id = vsp.FindGeomsWithName(self.horiz_tail_name)[0]
@@ -23,7 +34,19 @@ class VSP(om.ExplicitComponent):
         self.add_input('vert_tail_area', val=2295.)
         self.add_input('horiz_tail_area', val=6336.)
 
-        self.add_output('test')
+        # Shapes are pre-determined.
+        #self.add_output('wing_mesh', shape=(1485, 3))
+        #self.add_output('wing_mesh', shape=(33, 45, 3))
+        self.add_output('wing_mesh', shape=(9, 12, 3))
+
+        #self.add_output('vert_tail_mesh', shape=(297, 3))
+        #self.add_output('vert_tail_mesh', shape=(33, 9, 3))
+        self.add_output('vert_tail_mesh', shape=(9, 9, 3))
+
+        #self.add_output('horiz_tail_mesh', shape=(297, 3))
+        #self.add_output('horiz_tail_mesh', shape=(33, 9, 3))
+        self.add_output('horiz_tail_mesh', shape=(9, 9, 3))
+
         self.declare_partials(of='*', wrt='*', method='fd')
 
     def compute(self, inputs, outputs, discrete_inputs=None, discrete_outputs=None):
@@ -57,8 +80,25 @@ class VSP(om.ExplicitComponent):
         vert_tail_cuts = self.vsp_to_cuts(degen_obj, plane='xy')
         vert_tail_pts = self.vsp_to_point_cloud(degen_obj)
 
+        # OAS expects x stripes.
+        wing_pts = wing_pts.reshape((33, 45, 3), order='F')
+        horiz_tail_pts = horiz_tail_pts.reshape((33, 9, 3), order='F')
+        vert_tail_pts = vert_tail_pts.reshape((33, 9, 3), order='F')
+
+        # Reduce for testing. (See John Jasa's recommendations)
+        wing_pts = wing_pts[::4, ::4, :]
+        horiz_tail_pts = horiz_tail_pts[::4, :, :]
+        vert_tail_pts = vert_tail_pts[::4, :, :]
+
+        # Flip around to match expected order from examples.
+        wing_pts = wing_pts[::-1, ::-1, :]
+        horiz_tail_pts = horiz_tail_pts[::-1, ::-1, :]
+        vert_tail_pts = vert_tail_pts[::-1, ::-1, :]
+
         # outputs go here
-        outputs['test'] = 1
+        outputs['wing_mesh'] = wing_pts
+        outputs['vert_tail_mesh'] = horiz_tail_pts
+        outputs['horiz_tail_mesh'] = vert_tail_pts
 
     def vsp_to_cuts(self, degen_obj: degen_geom.DegenGeom, plane: str = 'xz') -> [[float]]:
         '''
@@ -96,32 +136,38 @@ class VSP(om.ExplicitComponent):
 
 
 if __name__ == "__main__":
-    vsp_file = 'eCRM-001.1_wing_tail.vsp3'
-    vsp.ReadVSPFile(vsp_file)
+    from openmdao.api import DirectSolver, NewtonSolver, BoundsEnforceLS
 
-    vsp_comp = VSP(horiz_tail_name="Tail", vert_tail_name="VerticalTail", wing_name="Wing")
+    vsp_comp = VSPeCRM(horiz_tail_name="Tail", vert_tail_name="VerticalTail", wing_name="Wing")
 
     p = om.Problem()
 
     model = p.model
-    newton = model.nonlinear_solver = NewtonSolver()
-    newton.options['iprint'] = 2
-    newton.options['maxiter'] = 100
-    newton.options['solve_subsystems'] = True
-    newton.options['atol'] = 1e-7
-    newton.options['rtol'] = 1e-15
-    newton.options['err_on_non_converge'] = True
+    #newton = model.nonlinear_solver = NewtonSolver()
+    #newton.options['iprint'] = 2
+    #newton.options['maxiter'] = 100
+    #newton.options['solve_subsystems'] = True
+    #newton.options['atol'] = 1e-7
+    #newton.options['rtol'] = 1e-15
+    #newton.options['err_on_non_converge'] = True
 
-    model.linear_solver = DirectSolver()
-    ls = newton.linesearch = BoundsEnforceLS()
-    ls.options['iprint'] = 2
-    ls.options['print_bound_enforce'] = True
-    ls.options['bound_enforcement'] = 'scalar'
+    #model.linear_solver = DirectSolver()
+    #ls = newton.linesearch = BoundsEnforceLS()
+    #ls.options['iprint'] = 2
+    #ls.options['print_bound_enforce'] = True
+    #ls.options['bound_enforcement'] = 'scalar'
 
     p.model.add_subsystem("vsp_comp", vsp_comp)
 
     p.setup()
 
     p.run_model()
+
+    data = {}
+    for item in ['wing_mesh', 'vert_tail_mesh', 'horiz_tail_mesh']:
+        data[item] = p.get_val(f"vsp_comp.{item}")
+
+    with open('baseline_meshes_reduced.pkl', 'wb') as f:
+        pickle.dump(data, f)
 
     om.n2(p)
