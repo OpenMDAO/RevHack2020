@@ -18,11 +18,13 @@ Finite differencing can be utilized, but this means re-propagating the trajector
 In the approach used here, we will use OpenMDAO to propagate a "state transition matrix" along-side the user's equations of motion.
 The state-transition matrix is a matrix which, multiplied by the initial state, yields the final state.
 
-\begin{align}
-    \bar{x}_f &= \left[ \phi \right] \bar{x}_0
-\end{align}
+<a href="https://www.codecogs.com/eqnedit.php?latex=\bar{x}_f&space;=&space;\left[&space;\phi&space;\right]&space;\bar{x}_0" target="_blank"><img src="https://latex.codecogs.com/svg.latex?\bar{x}_f&space;=&space;\left[&space;\phi&space;\right]&space;\bar{x}_0" title="\bar{x}_f = \left[ \phi \right] \bar{x}_0" /></a>
 
 That is, the state transition matrix ($\phi$) is the jacobian matrix of the final state w.r.t. the initial state.
+To integrate the state transition matrix, we start with a state transition matrix equal to the identity matrix at the initial time, and use the following formula as its derivative:
+
+<a href="https://www.codecogs.com/eqnedit.php?latex=\left[&space;\dot{\phi}&space;\right]&space;=&space;f_x&space;\left[&space;\phi&space;\right]" target="_blank"><img src="https://latex.codecogs.com/svg.latex?\left[&space;\dot{\phi}&space;\right]&space;=&space;f_x&space;\left[&space;\phi&space;\right]" title="\left[ \dot{\phi} \right] = f_x \left[ \phi \right]" /></a>
+
 An excellent discussion of the state transition matrix is provided by [Pellegrini and Russell](https://www.researchgate.net/publication/281440699_On_the_Accuracy_of_Trajectory_State-Transition_Matrices).
 
 ## Implementation using a manually-coded numerical integration technique
