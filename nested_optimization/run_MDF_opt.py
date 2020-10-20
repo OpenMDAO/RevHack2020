@@ -36,7 +36,6 @@ prob.model.add_objective("modified_power")
 prob.setup()
 
 prob.set_val("wind_speeds", wind_speeds)
-print("Running")
 prob.run_driver()
 
 prob.model.list_inputs()
