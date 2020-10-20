@@ -8,7 +8,6 @@ import pickle
 import numpy as np
 
 import openmdao.api as om
-from openmdao.api import DirectSolver, NewtonSolver, BoundsEnforceLS
 
 import openvsp as vsp
 import degen_geom
@@ -36,9 +35,17 @@ class VSPeCRM(om.ExplicitComponent):
         self.add_input('horiz_tail_area', val=6336.)
 
         # Shapes are pre-determined.
-        self.add_output('wing_mesh', shape=(1485, 3))
-        self.add_output('vert_tail_mesh', shape=(297, 3))
-        self.add_output('horiz_tail_mesh', shape=(297, 3))
+        #self.add_output('wing_mesh', shape=(1485, 3))
+        #self.add_output('wing_mesh', shape=(33, 45, 3))
+        self.add_output('wing_mesh', shape=(9, 12, 3))
+
+        #self.add_output('vert_tail_mesh', shape=(297, 3))
+        #self.add_output('vert_tail_mesh', shape=(33, 9, 3))
+        self.add_output('vert_tail_mesh', shape=(9, 9, 3))
+
+        #self.add_output('horiz_tail_mesh', shape=(297, 3))
+        #self.add_output('horiz_tail_mesh', shape=(33, 9, 3))
+        self.add_output('horiz_tail_mesh', shape=(9, 9, 3))
 
         self.declare_partials(of='*', wrt='*', method='fd')
 
@@ -72,6 +79,21 @@ class VSPeCRM(om.ExplicitComponent):
         degen_obj: degen_geom.DegenGeom = obj_dict[self.vert_tail_name]
         vert_tail_cuts = self.vsp_to_cuts(degen_obj, plane='xy')
         vert_tail_pts = self.vsp_to_point_cloud(degen_obj)
+
+        # OAS expects x stripes.
+        wing_pts = wing_pts.reshape((33, 45, 3), order='F')
+        horiz_tail_pts = horiz_tail_pts.reshape((33, 9, 3), order='F')
+        vert_tail_pts = vert_tail_pts.reshape((33, 9, 3), order='F')
+
+        # Reduce for testing. (See John Jasa's recommendations)
+        wing_pts = wing_pts[::4, ::4, :]
+        horiz_tail_pts = horiz_tail_pts[::4, :, :]
+        vert_tail_pts = vert_tail_pts[::4, :, :]
+
+        # Flip around to match expected order from examples.
+        wing_pts = wing_pts[::-1, ::-1, :]
+        horiz_tail_pts = horiz_tail_pts[::-1, ::-1, :]
+        vert_tail_pts = vert_tail_pts[::-1, ::-1, :]
 
         # outputs go here
         outputs['wing_mesh'] = wing_pts
@@ -114,6 +136,7 @@ class VSPeCRM(om.ExplicitComponent):
 
 
 if __name__ == "__main__":
+    from openmdao.api import DirectSolver, NewtonSolver, BoundsEnforceLS
 
     vsp_comp = VSPeCRM(horiz_tail_name="Tail", vert_tail_name="VerticalTail", wing_name="Wing")
 
@@ -144,7 +167,7 @@ if __name__ == "__main__":
     for item in ['wing_mesh', 'vert_tail_mesh', 'horiz_tail_mesh']:
         data[item] = p.get_val(f"vsp_comp.{item}")
 
-    with open('baseline_meshes.pkl', 'wb') as f:
+    with open('baseline_meshes_reduced.pkl', 'wb') as f:
         pickle.dump(data, f)
 
     om.n2(p)
