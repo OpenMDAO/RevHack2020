@@ -70,7 +70,7 @@ horiz_tail_surface = {
     # the total CL and CD.
     # These CL0 and CD0 values do not vary wrt alpha.
     'CL0': 0.0,  # CL of the surface at alpha=0
-    'CD0': 0.01,  # CD of the surface at alpha=0
+    'CD0': 0.0,  # CD of the surface at alpha=0
     'fem_origin': 0.35,
     # Airfoil properties for viscous drag calculation
     'k_lam': 0.05,  # percentage of chord with laminar
@@ -85,7 +85,7 @@ horiz_tail_surface = {
 vert_tail_surface = {
     # Wing definition
     'name': 'vert_tail',  # name of the surface
-    'symmetry': True,  # if true, model one half of wing
+    'symmetry': False,  # if true, model one half of wing
     # reflected across the plane y = 0
     'S_ref_type': 'wetted',  # how we compute the wing area,
     # can be 'wetted' or 'projected'
@@ -99,7 +99,7 @@ vert_tail_surface = {
     # the total CL and CD.
     # These CL0 and CD0 values do not vary wrt alpha.
     'CL0': 0.0,  # CL of the surface at alpha=0
-    'CD0': 0.01,  # CD of the surface at alpha=0
+    'CD0': 0.0,  # CD of the surface at alpha=0
     'fem_origin': 0.35,
     # Airfoil properties for viscous drag calculation
     'k_lam': 0.05,  # percentage of chord with laminar
@@ -120,10 +120,11 @@ model = prob.model
 indep_var_comp = om.IndepVarComp()
 indep_var_comp.add_output('v', val=248.136, units='m/s')
 indep_var_comp.add_output('alpha', val=0.0, units='deg')
+indep_var_comp.add_output('beta', val=0.0, units='deg')
 indep_var_comp.add_output('Mach_number', val=0.1)                   # 70 mph approx. TODO: make exact
 indep_var_comp.add_output('re', val=1.0e6, units='1/m')
 indep_var_comp.add_output('rho', val=0.38, units='kg/m**3')
-indep_var_comp.add_output('cg', val=np.zeros((3)), units='m')
+indep_var_comp.add_output('cg', val=np.array([262.614, 0.0, 115.861]), units='m')
 prob.model.add_subsystem('prob_vars', indep_var_comp, promotes=['*'])
 
 model.add_subsystem('vsp', VSPeCRM(horiz_tail_name="Tail",
@@ -141,10 +142,10 @@ prob.model.connect('vsp.vert_tail_mesh', 'aero.aero_states.vert_tail_def_mesh')
 # analyses
 aero_group = AeroPoint(surfaces=surfaces)
 prob.model.add_subsystem('aero', aero_group,
-                         promotes_inputs=['v', 'alpha', 'Mach_number', 're', 'rho', 'cg'])
+                         promotes_inputs=['v', 'alpha', 'beta', 'Mach_number', 're', 'rho', 'cg'])
 
 
-prob.setup()
+prob.setup(force_alloc_complex=True)
 
 # Initial conditions
 #prob.set_val('v', val=248.136, units='m/s')
@@ -160,7 +161,7 @@ prob.setup()
 
 prob.run_model()
 
-wrt = ['alpha', 'vsp.wing_cord', 'vsp.vert_tail_area', 'vsp.horiz_tail_area']
+wrt = ['alpha', 'beta', 'vsp.wing_cord', 'vsp.vert_tail_area', 'vsp.horiz_tail_area']
 of = ['aero.CL', 'aero.CD', 'aero.CM']
 
 totals = prob.compute_totals(of=of, wrt=wrt)

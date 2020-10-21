@@ -85,10 +85,14 @@ class VSPeCRM(om.ExplicitComponent):
         horiz_tail_pts = horiz_tail_pts.reshape((33, 9, 3), order='F')
         vert_tail_pts = vert_tail_pts.reshape((33, 9, 3), order='F')
 
+        # Tails have symmetry pts duplicated (not mirrored.) Use half.
+        horiz_tail_pts = horiz_tail_pts[:17, :, :]
+        vert_tail_pts = vert_tail_pts[:17, :, :]
+
         # Reduce for testing. (See John Jasa's recommendations)
         wing_pts = wing_pts[::4, ::4, :]
-        horiz_tail_pts = horiz_tail_pts[::4, :, :]
-        vert_tail_pts = vert_tail_pts[::4, :, :]
+        horiz_tail_pts = horiz_tail_pts[::2, :, :]
+        vert_tail_pts = vert_tail_pts[::2, :, :]
 
         # Flip around to match expected order from examples.
         wing_pts = wing_pts[::-1, ::-1, :]
