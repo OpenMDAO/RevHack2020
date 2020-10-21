@@ -1,8 +1,8 @@
 import numpy as np
 import openmdao.api as om
-from compute_pitch_angles import ComputePitchAngles
-from design_airfoil import DesignAirfoil
-from compute_modified_power import ComputeModifiedPower
+from components.compute_pitch_angles import ComputePitchAngles
+from components.design_airfoil import DesignAirfoil
+from components.compute_modified_power import ComputeModifiedPower
 
 
 wind_speeds = [4.0, 6.0, 8.0, 10.0]
@@ -63,7 +63,7 @@ for i in range(10):
     prob1.run_driver()
     prob1.model.list_inputs()
     prob1.model.list_outputs(print_arrays=True)
-    
+
     prob2.set_val("aerodynamic_efficiency", prob1["aerodynamic_efficiency"])
     prob2.run_driver()
     prob2.model.list_inputs()
