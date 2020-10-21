@@ -93,67 +93,55 @@ class CMAESTestCase(unittest.TestCase):
         assert_near_equal(es.result.fbest, 0.0, 1e-3)
         assert_near_equal(es.result.xbest, np.ones(ORDER), 1e-3)
 
-    def test_trust_constr(self):
-        #
-        # test case from test_scipy_optimizer
-        #
-
-        rosenbrock_size = 6  # size of the design variable
-
-        def rosenbrock(x):
-            x_0 = x[:-1]
-            x_1 = x[1:]
-            return sum((1 - x_0) ** 2) + 100 * sum((x_1 - x_0 ** 2) ** 2)
-
-        class Rosenbrock(om.ExplicitComponent):
-
-            def setup(self):
-                self.add_input('x', np.ones(rosenbrock_size))
-                self.add_output('f', 0.0)
-
-            def compute(self, inputs, outputs, discrete_inputs=None, discrete_outputs=None):
-                x = inputs['x']
-                outputs['f'] = rosenbrock(x)
-
-        class Rosenbrock(om.ExplicitComponent):
-
-            def setup(self):
-                self.add_input('x', np.array([1.5, 1.5, 1.5]))
-                self.add_output('f', 0.0)
-                self.declare_partials('f', 'x', method='fd', form='central', step=1e-2)
-
-            def compute(self, inputs, outputs, discrete_inputs=None, discrete_outputs=None):
-                x = inputs['x']
-                outputs['f'] = rosenbrock(x)
-
-        x0 = np.array([1.2, 0.8, 1.3])
-
-        prob = om.Problem()
-        model = prob.model
-        indeps = prob.model.add_subsystem('indeps', om.IndepVarComp(), promotes=['*'])
-        indeps.add_output('x', list(x0))
-
-        prob.model.add_subsystem('rosen', Rosenbrock(), promotes=['*'])
-        prob.model.add_subsystem('con', om.ExecComp('c=sum(x)', x=np.ones(3)), promotes=['*'])
-        prob.driver = driver = om.ScipyOptimizeDriver()
-        driver.options['optimizer'] = 'trust-constr'
-        driver.options['tol'] = 1e-8
-        driver.options['maxiter'] = 2000
-        driver.options['disp'] = False
-
-        model.add_design_var('x')
-        model.add_objective('f', scaler=1/rosenbrock(x0))
-        model.add_constraint('c', lower=0, upper=10)  # Double sided
-
-        prob.setup()
-        prob.run_driver()
-
-        assert_near_equal(prob['x'], np.ones(3), 2e-2)
-        assert_near_equal(prob['f'], 0., 1e-2)
-        self.assertTrue(prob['c'] < 10)
-        self.assertTrue(prob['c'] > 0)
 
 class CMAESDriverTestCase(unittest.TestCase):
+
+    def test_rosenbrock(self):
+        #
+        # test case from test_differential_evolution_driver
+        #
+        from cmaes_driver import CMAESDriver
+
+        ORDER = 6  # dimension of problem
+
+        span = 2   # upper and lower limits
+        lower_bound = -span*np.ones(ORDER)
+        upper_bound = span*np.ones(ORDER)
+
+        class RosenbrockComp(om.ExplicitComponent):
+            """
+            nth dimensional Rosenbrock function, array input and scalar output
+            global minimum at f(1,1,1...) = 0
+            """
+            def initialize(self):
+                self.options.declare('order', types=int, default=2, desc='dimension of input.')
+
+            def setup(self):
+                self.add_input('x', np.zeros(self.options['order']))
+                self.add_output('y', 0.0)
+
+            def compute(self, inputs, outputs):
+                x = inputs['x']
+
+                n = len(x)
+                assert (n > 1)
+                s = 0
+                for i in range(n - 1):
+                    s += 100 * (x[i + 1] - x[i] * x[i]) ** 2 + (1 - x[i]) ** 2
+
+                outputs['y'] = s
+
+        rosenbrock_model = om.Group()
+        rosenbrock_model.add_subsystem('rosenbrock', RosenbrockComp(order=ORDER))
+        rosenbrock_model.add_design_var('rosenbrock.x', lower=lower_bound, upper=upper_bound)
+        rosenbrock_model.add_objective('rosenbrock.y')
+
+        p = om.Problem(model=rosenbrock_model, driver=CMAESDriver())
+        p.setup()
+        p.run_driver()
+
+        assert_near_equal(p['rosenbrock.y'], 0.0, 1e-3)
+        assert_near_equal(p['rosenbrock.x'], np.ones(ORDER), 1e-3)
 
     # Shamelessly copied first of openmdao/drivers/tests/test_genetic_algorithm_driver.py
     # max_gen and pop_size options should be available with CMAES as well
@@ -200,10 +188,6 @@ class CMAESDriverTestCase(unittest.TestCase):
 
         prob.setup()
         prob.run_driver()
-
-        if extra_prints:
-            print('obj.f', prob['obj.f'])
-            print('px.x', prob['px.x'])
 
         # TODO: Satadru listed this solution, but I get a way better one.
         # Solution: xopt = [0.2857, -0.8571], fopt = 23.2933
