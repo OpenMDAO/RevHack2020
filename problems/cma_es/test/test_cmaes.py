@@ -1,6 +1,6 @@
 import unittest
 
-from pprint import pprint
+import cma
 
 import numpy as np
 import openmdao.api as om
@@ -15,18 +15,26 @@ class CMAESTestCase(unittest.TestCase):
         #
 
         ORDER = 6  # dimension of problem
+
         span = 2   # upper and lower limits
+        lower_bound = -span*np.ones(ORDER)
+        upper_bound = span*np.ones(ORDER)
 
         class RosenbrockComp(om.ExplicitComponent):
+            """
+            nth dimensional Rosenbrock function, array input and scalar output
+            global minimum at f(1,1,1...) = 0
+            """
+            def initialize(self):
+                self.options.declare('order', types=int, default=2, desc='dimension of input.')
+
             def setup(self):
-                self.add_input('x', np.zeros(ORDER))
+                self.add_input('x', np.zeros(self.options['order']))
                 self.add_output('y', 0.0)
 
             def compute(self, inputs, outputs):
                 x = inputs['x']
 
-                # nth dimensional Rosenbrock function, array input and scalar output
-                # global minimum at f(1,1,1...) = 0
                 n = len(x)
                 assert (n > 1)
                 s = 0
@@ -36,90 +44,54 @@ class CMAESTestCase(unittest.TestCase):
                 outputs['y'] = s
 
         rosenbrock_model = om.Group()
-        rosenbrock_model.add_subsystem('rosenbrock', RosenbrockComp())
-        rosenbrock_model.add_design_var('rosenbrock.x',
-                                        lower=-span * np.ones(ORDER),
-                                        upper=span * np.ones(ORDER))
+        rosenbrock_model.add_subsystem('rosenbrock', RosenbrockComp(order=ORDER))
+        rosenbrock_model.add_design_var('rosenbrock.x', lower=lower_bound, upper=upper_bound)
         rosenbrock_model.add_objective('rosenbrock.y')
 
         p = om.Problem(model=rosenbrock_model, driver=om.DifferentialEvolutionDriver(max_gen=800))
         p.setup()
-        print(p.run_driver())
+        p.run_driver()
 
-        # show results
-        print('objective function calls:', p.driver.iter_count)   # 96121
-
-        assert_near_equal(p['rosenbrock.y'], 0.0, 1e-5)
+        assert_near_equal(p['rosenbrock.y'], 0.0, 1e-3)
         assert_near_equal(p['rosenbrock.x'], np.ones(ORDER), 1e-3)
 
     def test_rosenbrock_cma(self):
         #
         # test case from cma.test
         #
+        rosenbrock = cma.ff.rosen
 
         ORDER = 6  # dimension of problem
+
         span = 2   # upper and lower limits
+        lower_bound = -span*np.ones(ORDER)
+        upper_bound = span*np.ones(ORDER)
 
-        import cma
-        print('----------------')
-        print('CMAOptions:')
-        pprint(cma.CMAOptions('verb')) # display verbosity options
-        print('----------------')
+        res = cma.fmin(rosenbrock, [-1]*ORDER, 0.01,
+                       options={'ftarget':1e-6, 'bounds':[lower_bound, upper_bound],
+                                'verb_time':0, 'verb_disp':0, 'seed':3})
 
-        print('----------------')
-        print('fmin:')
-        res = cma.fmin(cma.ff.rosen, ORDER * [-1], 0.01,
-                       options={'ftarget':1e-6, 'verb_time':0, 'verb_disp':0, 'seed':3},
-                       restarts=3)
+        # - res[0]  (xopt) -- best evaluated solution
+        # - res[1]  (fopt) -- respective function value
+        # - res[2]  (evalsopt) -- respective number of function evaluations
+        # - res[3]  (evals) -- number of overall conducted objective function evaluations
+        # - res[4]  (iterations) -- number of overall conducted iterations
+        # - res[5]  (xmean) -- mean of the final sample distribution
+        # - res[6]  (stds) -- effective stds of the final sample distribution
+        # - res[-3] (stop) -- termination condition(s) in a dictionary
+        # - res[-2] (cmaes) -- class `CMAEvolutionStrategy` instance
+        # - res[-1] (logger) -- class `CMADataLogger` instance
 
-        # show results
-        # print('----------------')
-        # print('tol:')
-        # pprint(cma.CMAOptions('tol'))  # display 'tolerance' termination options
-        print('----------------')
-        print('res (%d):' % len(res))
-        pprint(res)
-        # - ``res[0]`` (``xopt``) -- best evaluated solution
-        # - ``res[1]`` (``fopt``) -- respective function value
-        # - ``res[2]`` (``evalsopt``) -- respective number of function evaluations
-        # - ``res[3]`` (``evals``) -- number of overall conducted objective function evaluations
-        # - ``res[4]`` (``iterations``) -- number of overall conducted iterations
-        # - ``res[5]`` (``xmean``) -- mean of the final sample distribution
-        # - ``res[6]`` (``stds``) -- effective stds of the final sample distribution
-        # - ``res[-3]`` (``stop``) -- termination condition(s) in a dictionary
-        # - ``res[-2]`` (``cmaes``) -- class `CMAEvolutionStrategy` instance
-        # - ``res[-1]`` (``logger``) -- class `CMADataLogger` instance
         xopt = res[0]
         fopt = res[1]
-        evalsopt = res[2]
-        evals = res[3]
-        iterations = res[4]
-        print('x:', xopt)
-        print('y:', fopt)
-        print('evalsopt:', evalsopt)
-        print('evals:', evals)
-        print('iterations:', iterations)
-        print('----------------')
-        # print('rosenbrock.y:', p['rosenbrock.y'])
-        # print('objective function calls:', p.driver.iter_count)
 
-        # show results
-        print('objective function calls:', p.driver.iter_count)   # 96121
-
-        assert_near_equal(fopt, 0.0, 1e-5)
+        assert_near_equal(fopt, 0.0, 1e-3)
         assert_near_equal(xopt, np.ones(ORDER), 1e-3)
 
+        es = cma.CMAEvolutionStrategy([1]*ORDER, 1).optimize(rosenbrock)
 
-        # es = cma.CMAEvolutionStrategy(4 * [1], 1).optimize(cma.ff.rosen)
-        # print('res:')
-        # pprint(res)
-        # print('----------------')
-        # print('es:')
-        # pprint(es)
-        # # res[0], es.result[0]  # best evaluated solution
-        # # res[5], es.result[5]  # mean solution, presumably better with noise
-
-
+        assert_near_equal(es.result.fbest, 0.0, 1e-3)
+        assert_near_equal(es.result.xbest, np.ones(ORDER), 1e-3)
 
     def test_trust_constr(self):
         #
