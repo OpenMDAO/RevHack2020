@@ -90,6 +90,10 @@ class CMAESDriver(Driver):
         """
         Declare options before kwargs are processed in the init method.
         """
+        self.options.declare('sigma0', default=.1,types=float,
+                             desc='Initial standard deviation in each coordinate. '
+                                  'sigma0 should be about 1/4th of the search domain width '
+                                  '(where the optimum is to be expected).')
         self.options.declare('max_gen', default=100,
                              desc='Number of generations before termination.')
         self.options.declare('pop_size', default=0,
@@ -103,15 +107,11 @@ class CMAESDriver(Driver):
                              desc='Penalty function parameter.')
         self.options.declare('penalty_exponent', default=1.,
                              desc='Penalty function exponent.')
-        self.options.declare('Pc', default=0.9, lower=0., upper=1.,
-                             desc='Crossover probability.')
-        self.options.declare('F', default=0.9, lower=0., upper=1., allow_none=True,
-                             desc='Differential rate.')
         self.options.declare('multi_obj_weights', default={}, types=(dict),
                              desc='Weights of objectives for multi-objective optimization.'
-                             'Weights are specified as a dictionary with the absolute names'
-                             'of the objectives. The same weights for all objectives are assumed, '
-                             'if not given.')
+                                  'Weights are specified as a dictionary with the absolute names '
+                                  'of the objectives. The same weights for all objectives are '
+                                  'assumed, if not given.')
         self.options.declare('multi_obj_exponent', default=1., lower=0.,
                              desc='Multi-objective weighting exponent.')
 
@@ -229,9 +229,7 @@ class CMAESDriver(Driver):
         if pop_size == 0:
             pop_size = 20 * count
 
-        sigma0 = .01
-
-        res = cma.fmin(self.objective_callback, x0, sigma0,
+        res = cma.fmin(self.objective_callback, x0, self.options['sigma0'],
                        options={'bounds': [lower_bound, upper_bound], 'seed': self._randomstate})
 
         desvar_new = res[0]
