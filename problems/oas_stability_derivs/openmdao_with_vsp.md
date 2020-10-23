@@ -14,8 +14,10 @@ If you're running Debian or Ubuntu, the [provided installation instructions](htt
 2. Set up and activate a Python virtual environment using [Anaconda](https://www.anaconda.com) or Python's [venv](https://docs.python.org/3/tutorial/venv.html).
  - If swig isn't installed, run `pip install swig`.
  - swig may automatically select the system Python version rather than the one in your environment. To prevent this:
-  - `export PYTHON_INCLUDE_DIR=$(python -c "from distutils.sysconfig import get_python_inc; print(get_python_inc())"`
-  - `export PYTHON_LIBRARY=$(python -c "import distutils.sysconfig as sysconfig; print(sysconfig.get_config_var('LIBDIR'))")`
+ ```
+ export PYTHON_INCLUDE_DIR=$(python -c "from distutils.sysconfig import get_python_inc; print(get_python_inc())"`
+ export PYTHON_LIBRARY=$(python -c "import distutils.sysconfig as sysconfig; print(sysconfig.get_config_var('LIBDIR'))")`
+ ```
 
 3. Obtain OpenVSP source code by cloning the [OpenVSP GitHub repository](https://github.com/OpenVSP/OpenVSP.git).
 ```
@@ -26,5 +28,19 @@ mkdir repo build buildlibs
 git clone --depth=1 https://github.com/OpenVSP/OpenVSP.git repo
 ```
 
+4. Build the libraries.
+ - MacOS:
+ ```
+ cd buildlibs
+ cmake	-DPYTHON_INCLUDE_DIR=${PYTHON_INCLUDE_DIR} -DPYTHON_LIBRARY=${PYTHON_LIBRARY} ../repo/Libraries -DCMAKE_BUILD_TYPE=Release
+ make -j8
+ ```
+
+ - CentOS 7 (we ran into some version conflicts building the GUI on CentOS):
+ ```
+ cd buildlibs
+ cmake3 -DVSP_NO_GRAPHICS=true -DPYTHON_INCLUDE_DIR=${PYTHON_INCLUDE_DIR} -DPYTHON_LIBRARY=${PYTHON_LIBRARY} -DVSP_USE_SYSTEM_LIBXML2=true      -DVSP_USE_SYSTEM_FLTK=true ../repo/Libraries -DCMAKE_BUILD_TYPE=Release
+ make -j8
+ ```
 
 ## Incorporating OpenVSP into OpenMDAO
