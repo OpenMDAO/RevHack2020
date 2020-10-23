@@ -6,12 +6,14 @@ The OpenVSP installation process is fairly well documented, but we found some st
 
 If you're running Debian or Ubuntu, the [provided installation instructions](http://openvsp.org/wiki/doku.php?id=ubuntu_instructions) work well for the application portion; follow those and skip to step 7. Steps 1-6 are adapted here for MacOS and CentOS 7.
 
-### 1. Install dependencies. On MacOS, an easy way to install these is with a package manager such [Homebrew](https://brew.sh/).
+### 1. Install dependencies.
+ - On MacOS, an easy way to install these is with a package manager such [Homebrew](https://brew.sh/).
  - Chief among these is CMake. Make sure it's at least version 3, or some functions will fail.
  - MacOS with Homebrew: `brew install graphviz doxygen libjpeg cmake gfortran`
  - CentOS 7: `sudo yum install -y graphviz doxygen libjpeg cmake3 gfortran glew glew-devel fltk fltk-devel fltk-fluid libxml2-static libxml2-devel`
 
-### 2. Set up and activate a Python virtual environment using [Anaconda](https://www.anaconda.com) or Python's [venv](https://docs.python.org/3/tutorial/venv.html).
+### 2. Set up and activate a Python virtual environment.
+ - [Anaconda](https://www.anaconda.com) or Python's [venv](https://docs.python.org/3/tutorial/venv.html) are good options.
  - If swig isn't installed, run `pip install swig`.
  - swig may automatically select the system Python version rather than the one in your environment. To prevent this:
  ```
@@ -19,7 +21,8 @@ If you're running Debian or Ubuntu, the [provided installation instructions](htt
  export PYTHON_LIBRARY=$(python -c "import distutils.sysconfig as sysconfig; print(sysconfig.get_config_var('LIBDIR'))")`
  ```
 
-3. Obtain OpenVSP source code by cloning the [OpenVSP GitHub repository](https://github.com/OpenVSP/OpenVSP.git).
+### 3. Obtain OpenVSP source code.
+Clone the [OpenVSP GitHub repository](https://github.com/OpenVSP/OpenVSP.git):
 ```
 mkdir OpenVSP; cd OpenVSP
 
@@ -28,7 +31,7 @@ mkdir repo build buildlibs
 git clone --depth=1 https://github.com/OpenVSP/OpenVSP.git repo
 ```
 
-4. Build the libraries.
+### 4. Build the libraries.
  - MacOS:
  ```
  cd buildlibs
@@ -43,7 +46,7 @@ git clone --depth=1 https://github.com/OpenVSP/OpenVSP.git repo
  make -j8
  ```
 
-5. Build the OpenVSP application.
+### 5. Build the OpenVSP application.
  - MacOS:
  ```
  cd ..
@@ -66,15 +69,17 @@ git clone --depth=1 https://github.com/OpenVSP/OpenVSP.git repo
  make -j8
  ```
 
-6. Make a folder and zip file with binaries. This step is important because you'll need this directory structure to install the Python packages:
+### 6. Make a folder and zip file with binaries.
+ This step is important because you'll need this directory structure to install the Python packages:
  - `make package`
 
-7. Set the installation prefix and OpenVSP version. You'll need to determine from the repository which version of OpenVSP you're working with.
+### 7. Set the installation prefix and OpenVSP version.
+ You'll need to determine from the repository which version of OpenVSP you're working with.
  - With Anaconda: `export INST_PREFIX=$CONDA_PREFIX OPENVSP_VERSION=X.Y.Z`
  - With venv: `export INST_PREFIX=$VIRTUAL_ENV OPENVSP_VERSION=X.Y.Z`
  - Otherwise, set to a location that works for you: `export INST_PREFIX=$HOME/opt OPENVSP_VERSION=X.Y.Z`
 
-8. Install the OpenVSP Python packages:
+### 8. Install the OpenVSP Python packages.
  - MacOS:
  ```
  # Set to the OpenVSP version you're installing:
@@ -96,6 +101,7 @@ git clone --depth=1 https://github.com/OpenVSP/OpenVSP.git repo
  popd
  ```
 
-9. A quick test to make sure the installation is in place: `python -c "import openvsp"`
+### 9. Test
+ A quick test to make sure the installation is in place: `python -c "import openvsp"`
 
 ## Incorporating OpenVSP into OpenMDAO
