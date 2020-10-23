@@ -184,7 +184,8 @@ class CMAESDriverTestCase(unittest.TestCase):
         model.add_objective('obj.f')
 
         prob.driver = CMAESDriver()
-        prob.driver.options['max_gen'] = 75
+        prob.driver.CMAOptions['popsize'] = 10
+        prob.driver.CMAOptions['verbose'] = -9  # silence output
 
         prob.setup()
         prob.run_driver()

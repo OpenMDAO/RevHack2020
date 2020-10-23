@@ -73,8 +73,10 @@ class CMAESDriver(Driver):
         self.supports['distributed_design_vars'] = False
         self.supports._read_only = True
 
+        # expose CMAOptions
+        self.CMAOptions = cma.CMAOptions()
+
         self._desvar_idx = {}
-        self._cmaes = None
 
         # random state can be set for predictability during testing
         if 'CMAESDriver_seed' in os.environ:
@@ -229,8 +231,13 @@ class CMAESDriver(Driver):
         if pop_size == 0:
             pop_size = 20 * count
 
+        self.CMAOptions['bounds'] = [lower_bound, upper_bound]
+
+        if self._randomstate:
+            self.CMAOptions['seed'] = self._randomstate
+
         res = cma.fmin(self.objective_callback, x0, self.options['sigma0'],
-                       options={'bounds': [lower_bound, upper_bound], 'seed': self._randomstate})
+                       options=self.CMAOptions)
 
         desvar_new = res[0]
 
