@@ -6,12 +6,12 @@ The OpenVSP installation process is fairly well documented, but we found some st
 
 If you're running Debian or Ubuntu, the [provided installation instructions](http://openvsp.org/wiki/doku.php?id=ubuntu_instructions) work well for the application portion; follow those and skip to step 7. Steps 1-6 are adapted here for MacOS and CentOS 7.
 
-1. Install dependencies. On MacOS, an easy way to install these is with a package manager such [Homebrew](https://brew.sh/).
+### 1. Install dependencies. On MacOS, an easy way to install these is with a package manager such [Homebrew](https://brew.sh/).
  - Chief among these is CMake. Make sure it's at least version 3, or some functions will fail.
  - MacOS with Homebrew: `brew install graphviz doxygen libjpeg cmake gfortran`
  - CentOS 7: `sudo yum install -y graphviz doxygen libjpeg cmake3 gfortran glew glew-devel fltk fltk-devel fltk-fluid libxml2-static libxml2-devel`
 
-2. Set up and activate a Python virtual environment using [Anaconda](https://www.anaconda.com) or Python's [venv](https://docs.python.org/3/tutorial/venv.html).
+### 2. Set up and activate a Python virtual environment using [Anaconda](https://www.anaconda.com) or Python's [venv](https://docs.python.org/3/tutorial/venv.html).
  - If swig isn't installed, run `pip install swig`.
  - swig may automatically select the system Python version rather than the one in your environment. To prevent this:
  ```
