@@ -132,10 +132,15 @@ def Thrust(u0, power, A, T, rho, kappa):
         # thrust = thrust + (T_new - thrust) * 0.5
 
         # # Newton-Raphson
-        root_term = (u0**2 + 2 * thrust / rho / A)**0.5
-        R = power - thrust * (u0 + kappa * (-u0 / 2 + 0.5 * root_term))
-        R_prime = -u0 - kappa * ( -u0 / 2 + 0.5 * root_term + 0.5 * thrust / rho / A / root_term)
-        thrust = T_old - R / R_prime
+        with np.errstate(all='raise'):
+            try:
+                root_term = (u0**2 + 2 * thrust / rho / A)**0.5
+                R = power - thrust * (u0 + kappa * (-u0 / 2 + 0.5 * root_term))
+                R_prime = -u0 - kappa * ( -u0 / 2 + 0.5 * root_term + 0.5 * thrust / rho / A / root_term)
+                thrust = T_old - R / R_prime
+            except:
+                raise om.AnalysisError('invalid calc in thrust')
+
 
     # the induced velocity (i.e., velocity added at the disk) is
     v_i = (-u0 / 2 + (u0**2 / 4. + thrust / 2 / rho / A)**0.5)
@@ -241,11 +246,11 @@ def CLfunc(angle, alpha_stall, AR, e, a0, t_over_c):
     fmax = np.max(CL_array, axis=1)
     fmax_neg = np.max(CL_array_neg, axis=1)
 
-    if np.any(angle >= 0):
-        CL[pos_idxs] = -(fmax + 1 / ks_rho * np.log(np.sum(np.exp(ks_rho * (CL_array - fmax[:, np.newaxis])))))
-    if np.any(angle < 0):
-        CL[neg_idxs] = (fmax_neg + 1 / ks_rho * np.log(np.sum(np.exp(ks_rho * (CL_array_neg - fmax_neg[:, np.newaxis])))))
-
+    with np.printoptions(linewidth=1024):
+        if np.any(angle >= 0):
+            CL[pos_idxs] = -(fmax[pos_idxs, np.newaxis] + 1 / ks_rho * np.log(np.sum(np.exp(ks_rho * (CL_array[pos_idxs, :] - fmax[pos_idxs, np.newaxis]))))).ravel()
+        if np.any(angle < 0):
+            CL[neg_idxs] = (fmax_neg[neg_idxs, np.newaxis] + 1 / ks_rho * np.log(np.sum(np.exp(ks_rho * (CL_array_neg[neg_idxs] - fmax_neg[neg_idxs, np.newaxis]))))).ravel()
     return CL
 
 def CDfunc(angle, AR, e, alpha_stall, coeffs, a0, t_over_c):
@@ -334,7 +339,7 @@ def aero(atov, v_inf, theta, T, alpha_stall, CD0, AR, e, rho, S, m, a0, t_over_c
     D_wings = 0.5 * rho * v_blown ** 2 * CD * S
     D_fuse = 0.5 * rho * v_inf ** 2 * CD0 * S
 
-    return CL, CD, aoa_blown, L, D_wings, D_fuse
+    return CL, CD, aoa_blown, L, D_wings, D_fuse, aoa_blown
 
 
 class Dynamics(om.ExplicitComponent):
@@ -426,6 +431,7 @@ class Dynamics(om.ExplicitComponent):
         self.add_output('energy_dot', val=np.ones(nn))
 
         self.add_output('acc', val=np.ones(nn))
+        self.add_output('aoa', val=np.ones(nn))
         # if self.stall_option == 'ns':
         #     self.add_output('aoa_max', shape=np.ones(nn))
         #     self.add_output('aoa_min', shape=np.ones(nn))
@@ -456,7 +462,7 @@ class Dynamics(om.ExplicitComponent):
         # self.aoa_prop = np.zeros(self.num_steps, dtype=complex)  # propeller angle of attack
 
         # use complex step for partial derivatives
-        self.declare_partials('*', '*', method='cs')
+        self.declare_partials('*', '*', method='fd')
 
     def compute(self, inputs, outputs):
 
@@ -491,11 +497,11 @@ class Dynamics(om.ExplicitComponent):
 
         Normal_F = Normal_force(v_inf, self.R, thrust / self.n_props, atov - theta, self.rho, self.nB, self.bc)
 
-        CL, CD, aoa_blown, L, D_wings, D_fuse = aero(atov, v_inf, theta, thrust, self.alpha_stall,
-                                                     self.CD0, self.AR, self.e, self.rho, self.S,
-                                                     self.m, self.a0, self.t_over_c,
-                                                     self.quartic_poly_coeffs, vi, self.v_factor,
-                                                     self.n_props * Normal_F)
+        CL, CD, aoa_blown, L, D_wings, D_fuse, aoa_blown = aero(atov, v_inf, theta, thrust, self.alpha_stall,
+                                                                self.CD0, self.AR, self.e, self.rho, self.S,
+                                                                self.m, self.a0, self.t_over_c,
+                                                                self.quartic_poly_coeffs, vi, self.v_factor,
+                                                                self.n_props * Normal_F)
 
         # compute horizontal and vertical changes in velocity
         outputs['x_dot'] = vx
@@ -505,6 +511,7 @@ class Dynamics(om.ExplicitComponent):
         outputs['energy_dot'] = power
 
         outputs['acc'] = np.sqrt(outputs['vx_dot']**2 + outputs['vy_dot']**2) / 9.81
+        outputs['aoa'] = aoa_blown
 
 
 if __name__ == '__main__':
@@ -559,7 +566,9 @@ if __name__ == '__main__':
 
     traj = dm.Trajectory()
     p.model.add_subsystem('traj', traj)
-    phase = dm.Phase(transcription=dm.Radau(num_segments=1), ode_class=Dynamics, ode_init_kwargs={'input_dict': input_dict})
+    phase = dm.Phase(transcription=dm.Radau(num_segments=1),
+                     ode_class=Dynamics,
+                     ode_init_kwargs={'input_dict': input_dict})
 
     traj.add_phase('phase0', phase)
 
