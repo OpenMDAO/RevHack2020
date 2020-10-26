@@ -464,6 +464,10 @@ class Dynamics(om.ExplicitComponent):
         # use complex step for partial derivatives
         self.declare_partials('*', '*', method='fd')
 
+        # Partial derivative coloring
+        # self.declare_coloring(wrt=['*'], method='cs', tol=1.0E-12, num_full_jacs=5,
+        #                       show_summary=True, show_sparsity=True, min_improve_pct=10.)
+
     def compute(self, inputs, outputs):
 
         # self.x_dots[0] = self.x_dot_initial

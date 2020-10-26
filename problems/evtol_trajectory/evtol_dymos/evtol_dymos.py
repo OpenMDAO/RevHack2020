@@ -55,21 +55,21 @@ if __name__ == '__main__':
     traj = dm.Trajectory()
     p.model.add_subsystem('traj', traj)
 
-    phase = dm.Phase(transcription=dm.Radau(num_segments=5, solve_segments=False),
+    phase = dm.Phase(transcription=dm.GaussLobatto(num_segments=5, solve_segments=False),
                      ode_class=Dynamics,
                      ode_init_kwargs={'input_dict': input_dict})
 
     traj.add_phase('phase0', phase)
 
     phase.set_time_options(fix_initial=True, duration_bounds=(5, 60), duration_scaler=3e-2)
-    phase.add_state('x', fix_initial=True, rate_source='x_dot')
+    phase.add_state('x', fix_initial=True, rate_source='x_dot', ref=900, defect_ref=100)
     phase.add_state('y', fix_initial=True, rate_source='y_dot')
     phase.add_state('vx', fix_initial=True, rate_source='vx_dot')
     phase.add_state('vy', fix_initial=True, rate_source='vy_dot')
-    phase.add_state('energy', fix_initial=True, rate_source='energy_dot')
+    phase.add_state('energy', fix_initial=True, rate_source='energy_dot', ref=1E7, defect_ref=1E5)
 
-    phase.add_control('power', lower = 1e3, upper = 311000, scaler=5e-6)
-    phase.add_control('theta', lower = 0., upper = 3*np.pi/4, scaler=1.2)
+    phase.add_control('power', lower = 1e3, upper =311000, scaler=5e-6)
+    phase.add_control('theta', lower = 0., upper =3*np.pi/4, scaler=1.2)
 
     # Objective
     phase.add_objective('energy', loc='final', scaler=2e-7)
@@ -80,13 +80,12 @@ if __name__ == '__main__':
     phase.add_boundary_constraint('x_dot', loc='final', equals=67., scaler=2e-2)  # Constraint for the final horizontal speed
     
     # Path Constraints
-    phase.add_path_constraint('y', lower=0.)  # Constraint for the minimum vertical displacement
+    phase.add_path_constraint('y', lower=0., upper=305, ref=300)  # Constraint for the minimum vertical displacement
     phase.add_path_constraint('acc', upper=0.3, scaler=4.)  # Constraint for the acceleration magnitude
     phase.add_path_constraint('aoa', lower=-10, upper=10, ref0=-10, ref=10)  # Constraint for the acceleration magnitude
 
     # Setup the driver
     p.driver = om.pyOptSparseDriver()
-    p.driver.add_recorder(om.SqliteRecorder("cases.sql"))
     p.driver.options['optimizer'] = "SNOPT"
     p.driver.opt_settings['Major optimality tolerance'] = 1e-7
     p.driver.opt_settings['Major feasibility tolerance'] = 1e-7
@@ -94,21 +93,28 @@ if __name__ == '__main__':
     p.driver.opt_settings['Minor iterations limit'] = 100000
     p.driver.opt_settings['iSumm'] = 6
 
+    # p.driver.declare_coloring(tol=1.0E-1)
+
+    p.add_recorder(om.SqliteRecorder("solution.sql"))
+
     p.setup()
 
     p.set_val('traj.phase0.t_initial', 0.0)
     p.set_val('traj.phase0.t_duration', 10.0)
-    p.set_val('traj.phase0.states:x', 0.0)
-    p.set_val('traj.phase0.states:y', 0.01)
-    p.set_val('traj.phase0.states:vx', 0.01)
-    p.set_val('traj.phase0.states:vy', 0.01)
+    p.set_val('traj.phase0.states:x', phase.interpolate(ys=[0, 900], nodes='state_input'))
+    p.set_val('traj.phase0.states:y',  phase.interpolate(ys=[0, 300], nodes='state_input'))
+    p.set_val('traj.phase0.states:vx', phase.interpolate(ys=[0, 20], nodes='state_input'))
+    p.set_val('traj.phase0.states:vy', phase.interpolate(ys=[0.01, 0.01], nodes='state_input'))
     p.set_val('traj.phase0.states:energy', 0.0)
     p.set_val('traj.phase0.controls:power', 200000.0)
     p.set_val('traj.phase0.controls:theta', 0.05)
 
+
     p.run_driver()
 
-    exp_out = traj.simulate()
+    p.record('final')
+
+    exp_out = traj.simulate(record_file='simulation.sql')
 
     import matplotlib.pyplot as plt
     plt.plot(exp_out.get_val('traj.phase0.timeseries.states:x'),
