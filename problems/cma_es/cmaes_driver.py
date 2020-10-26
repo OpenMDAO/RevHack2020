@@ -468,12 +468,10 @@ class CMAES(object):
 
             self.CMAOptions['bounds'] = [vlb, vub]
             self.CMAOptions['verbose'] = verbose
-            self.CMAOptions['seed'] = random_state
+            if random_state:
+                self.CMAOptions['seed'] = random_state
             if pop_size:
                 self.CMAOptions['popsize'] = pop_size
-
-            # from pprint import pprint
-            # pprint(self.CMAOptions)
 
             res = cma.fmin(self.objfun, x0, sigma0, options=self.CMAOptions)
 
@@ -481,11 +479,25 @@ class CMAES(object):
 
         else:
             # FIXME:  run in parallel
+            print('pop_size:', pop_size)
+
+            concurrent_pop_size, concurrent_color = self.model_mpi
+            print('concurrent pop_size:', concurrent_pop_size)
+            print('color:', concurrent_color)
+
+            xopt = copy.deepcopy(vlb)
+            fopt = np.inf
+
+            if np.mod(pop_size, 2) == 1:
+                pop_size += 1
 
             self.CMAOptions['bounds'] = [vlb, vub]
             self.CMAOptions['seed'] = random_state
             if pop_size:
                 self.CMAOptions['popsize'] = pop_size
+
+            # from pprint import pprint
+            # pprint(self.CMAOptions)
 
             res = cma.fmin(self.objfun, x0, sigma0, options=self.CMAOptions)
 
