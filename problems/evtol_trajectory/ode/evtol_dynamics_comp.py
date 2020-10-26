@@ -124,10 +124,7 @@ def Thrust(u0, power, A, T, rho, kappa):
     thrust = T
 
     # iteration loop to solve for the thrust as a function of power
-    count = 0
     while np.any(np.abs(T_old - thrust) > 1e-10):
-        count += 1
-        print(T_old, thrust, np.abs(T_old - thrust))
         T_old = thrust
 
         # ### FPI (Fixed point iteration)
@@ -251,38 +248,6 @@ def CLfunc(angle, alpha_stall, AR, e, a0, t_over_c):
 
     return CL
 
-
-    #     CL = -(fmax + 1 / ks_rho * np.log(np.sum(np.exp(ks_rho * (CL_array - fmax)))))
-    #
-    #     # this is because something strange happens very near 0 for complex step
-    #     if angle.real < 1e-8:
-    #         CL = CLa * angle
-    #
-    # else:
-    #
-    #     CLa = a0 / (1 + a0 / (np.pi * e * AR))
-    #     CL_stall = CLa * alpha_stall
-    #
-    #     # CD_max = (1. + 0.065 * AR) / (0.9 + t_over_c)
-    #     CD_max = 1.1 + 0.018 * AR
-    #
-    #     CL1 = CLa * angle
-    #
-    #     A1 = CD_max / 2
-    #     A2 = (CL_stall - CD_max * np.sin(alpha_stall) * np.cos(alpha_stall)) * np.sin(alpha_stall) / np.cos(alpha_stall)**2
-    #     CL2 = A1 * np.sin(2 * angle) + A2 * np.cos(angle)**2 / np.sin(angle)
-    #
-    #     CL_array = np.array([CL1, CL2], dtype = complex)
-    #     ks_rho = 50. # Hard coded, see Martins and Poon 2005 for more
-    #     fmax = np.max(CL_array)
-    #     CL = (fmax + 1 / ks_rho * np.log(np.sum(np.exp(ks_rho * (CL_array - fmax)))))
-    #
-    #     # this is because something strange happens very near 0 for complex step
-    #     if angle.real > -1e-8:
-    #         CL = CLa * angle
-    #
-    # return CL
-
 def CDfunc(angle, AR, e, alpha_stall, coeffs, a0, t_over_c):
     """
     This gives the drag coefficient of a wing as a function of angle of attack.
@@ -372,93 +337,6 @@ def aero(atov, v_inf, theta, T, alpha_stall, CD0, AR, e, rho, S, m, a0, t_over_c
     return CL, CD, aoa_blown, L, D_wings, D_fuse
 
 
-def change(atov, v_inf, dt, theta, T, alpha_stall, CD0, AR, e, rho, S, m, a0, t_over_c, coeffs, v_i, v_factor, Normal_F):
-    """
-    This computes the change in velocity for each time step.
-
-    Parameters
-    ----------
-    atov : float
-        Freestream angle to the vertical
-    v_inf : float
-        Freestream speed
-    dt : float
-        Time step size
-    theta : float
-        Wing angle to the vertical
-    T : float
-        Thrust
-    alpha_stall : float
-        Stall angle of attack
-    CD0 : float
-        Parasite drag coefficient for fuse, gear, etc.
-    AR : float
-        Aspect ratio
-    e : float
-        Span efficiency factor
-    rho : float
-        Air density
-    S : float
-        Wing planform area
-    m : float
-        Mass of the aircraft
-    a0 : float
-        Airfoil lift-curve slope
-    t_over_c : float
-        Thickness-to-chord ratio
-    coeffs : array
-        Curve-fit polynomial coefficients for the drag coefficient below 27.5 deg
-    v_i : float
-        Induced-velocity value from the propellers
-    v_factor : float
-        Induced-velocity factor
-    Normal_F : float
-        Total propeller forces normal to the propeller axes
-
-    Returns
-    -------
-    delta_xdot : float
-        Change in horizontal velocity
-    delta_ydot : float
-        Change in vertical velocity
-    CL : float
-        Wing lift coefficient
-    CD : float
-        Wing drag coefficient
-    aoa_blown : float
-        Effective angle of attack with prop wash
-    L : float
-        Total lift force of the wings
-    D_wings : float
-        Total drag force of the wings
-    D_fuse : float
-        Drag force of the fuselage
-    """
-
-    # use angle of attack of wing to estimate CL and CD
-    aoa = atov - theta
-    v_chorwise =  v_inf * np.cos(aoa)
-    v_normal = v_inf * np.sin(aoa)
-
-    v_chorwise += v_i * v_factor
-    v_blown = (v_chorwise**2 + v_normal**2)**0.5
-    aoa_blown = cs_atan2(v_normal, v_chorwise)
-
-    CL = CLfunc(aoa_blown, alpha_stall, AR, e, a0, t_over_c)
-    CD = CDfunc(aoa_blown, AR, e, alpha_stall, coeffs, a0, t_over_c)
-
-    # compute lift and drag forces
-    L = 0.5 * rho * v_blown**2 * CL * S
-    D_wings = 0.5 * rho * v_blown**2 * CD * S
-    D_fuse = 0.5 * rho * v_inf**2 * CD0 * S
-
-    # compute horizontal and vertical changes in velocity
-    delta_xdot = (T * np.sin(theta) - D_fuse * np.sin(atov) - D_wings * np.sin(theta + aoa_blown) - L * np.cos(theta + aoa_blown) - Normal_F * np.cos(theta)) / m * dt
-    delta_ydot = (T * np.cos(theta) - D_fuse * np.cos(atov) - D_wings * np.cos(theta + aoa_blown) + L * np.sin(theta + aoa_blown) + Normal_F * np.sin(theta) - m * 9.81) / m * dt
-
-    return np.array([delta_xdot, delta_ydot, CL, CD, aoa_blown, L, D_wings, D_fuse])
-
-
 class Dynamics(om.ExplicitComponent):
     """
     This is the OpenMDAO component that takes the design variables and computes
@@ -545,11 +423,9 @@ class Dynamics(om.ExplicitComponent):
         self.add_output('y_dot', val=np.ones(nn))
         self.add_output('vx_dot', val=np.ones(nn))
         self.add_output('vy_dot', val=np.ones(nn))
-        # self.add_output('x', shape=np.ones(nn))
-        # self.add_output('y', shape=np.ones(nn))
-        # self.add_output('y_min', shape=np.ones(nn))
-        # self.add_output('u_prop_min', shape=np.ones(nn))
         self.add_output('energy_dot', val=np.ones(nn))
+
+        self.add_output('acc', val=np.ones(nn))
         # if self.stall_option == 'ns':
         #     self.add_output('aoa_max', shape=np.ones(nn))
         #     self.add_output('aoa_min', shape=np.ones(nn))
@@ -615,8 +491,6 @@ class Dynamics(om.ExplicitComponent):
 
         Normal_F = Normal_force(v_inf, self.R, thrust / self.n_props, atov - theta, self.rho, self.nB, self.bc)
 
-        ###
-
         CL, CD, aoa_blown, L, D_wings, D_fuse = aero(atov, v_inf, theta, thrust, self.alpha_stall,
                                                      self.CD0, self.AR, self.e, self.rho, self.S,
                                                      self.m, self.a0, self.t_over_c,
@@ -629,6 +503,8 @@ class Dynamics(om.ExplicitComponent):
         outputs['vx_dot'] = (thrust * np.sin(theta) - D_fuse * np.sin(atov) - D_wings * np.sin(theta + aoa_blown) - L * np.cos(theta + aoa_blown) - Normal_F * np.cos(theta)) / self.m
         outputs['vy_dot'] = (thrust * np.cos(theta) - D_fuse * np.cos(atov) - D_wings * np.cos(theta + aoa_blown) + L * np.sin(theta + aoa_blown) + Normal_F * np.sin(theta) - self.m * 9.81) / self.m
         outputs['energy_dot'] = power
+
+        outputs['acc'] = np.sqrt(outputs['vx_dot']**2 + outputs['vy_dot']**2) / 9.81
 
 
 if __name__ == '__main__':
@@ -705,9 +581,14 @@ if __name__ == '__main__':
     p.set_val('traj.phase0.states:vx', 0.01)
     p.set_val('traj.phase0.states:vy', 0.01)
     p.set_val('traj.phase0.states:energy', 0.0)
-    p.set_val('traj.phase0.controls:power', 100000.0)
-    p.set_val('traj.phase0.controls:theta', 0.0)
+    p.set_val('traj.phase0.controls:power', 150000.0)
+    p.set_val('traj.phase0.controls:theta', 0.05)
 
     p.run_model()
 
     exp_out = traj.simulate()
+
+    import matplotlib.pyplot as plt
+    plt.plot(exp_out.get_val('traj.phase0.timeseries.states:x'),
+             exp_out.get_val('traj.phase0.timeseries.states:y'))
+    plt.show()
