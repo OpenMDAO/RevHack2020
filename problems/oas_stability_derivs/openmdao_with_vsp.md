@@ -206,7 +206,7 @@ Compute the degenerate geometry representation for the OpenVSP components, and o
         vert_cloud = self.vsp_to_point_cloud(degen_obj)
 ```
 
-The purpose of this RevHack exercise was to use OpenAeroStruct, so update the meshes to work with it.
+The purpose of this RevHack exercise was to use [OpenAeroStruct](https://github.com/mdolab/OpenAeroStruct), so update the meshes to work with it.
 ```
         # VSP outputs wing outer mold lines at points along the span.
         # Reshape to (chord, span, dimension)
