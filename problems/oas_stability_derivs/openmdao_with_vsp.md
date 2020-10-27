@@ -135,6 +135,9 @@ class VSPeCRM(om.ExplicitComponent):
                              desc="Name of the vertical tail in the vsp model.")
         self.options.declare('wing_name', default='Wing',
                              desc="Name of the wing in the vsp model.")
+        self.options.declare('reduced', default=False,
+                             desc="When True, output reduced meshes instead of full-size ones. "
+                             "Running with a smaller mesh is of value when debugging.")
 ```
 
 Load the OpenVSP project from a VSP3 file and find the IDs of the relevant geometries.
@@ -155,16 +158,21 @@ Load the OpenVSP project from a VSP3 file and find the IDs of the relevant geome
         self.vert_tail_id = vsp.FindGeomsWithName(vert_tail_name)[0]
 ```
 
-Set up inputs with initial values, and outputs with units and 3-dimensional shapes. Here we use the finite difference approximation method for partial derivatives.
+Set up inputs with initial values, and outputs with units and 3-dimensional shapes. The finite difference approximation method for partial derivatives is used.
 ```
         self.add_input('wing_cord', val=59.05128,)
         self.add_input('vert_tail_area', val=2295.)
         self.add_input('horiz_tail_area', val=6336.)
 
         # Shapes are pre-determined.
-        self.add_output('wing_mesh', shape=(23, 33, 3), units='inch')
-        self.add_output('vert_tail_mesh', shape=(33, 9, 3), units='inch')
-        self.add_output('horiz_tail_mesh', shape=(33, 9, 3), units='inch')
+        if reduced:
+            self.add_output('wing_mesh', shape=(12, 9, 3), units='inch')
+            self.add_output('vert_tail_mesh', shape=(9, 9, 3), units='inch')
+            self.add_output('horiz_tail_mesh', shape=(9, 9, 3), units='inch')
+        else:
+            self.add_output('wing_mesh', shape=(23, 33, 3), units='inch')
+            self.add_output('vert_tail_mesh', shape=(33, 9, 3), units='inch')
+            self.add_output('horiz_tail_mesh', shape=(33, 9, 3), units='inch')
 
         self.declare_partials(of='*', wrt='*', method='fd')
 ```
@@ -198,6 +206,8 @@ Compute the degenerate geometry representation for the OpenVSP components, and o
         vert_tail_pts = self.vsp_to_point_cloud(degen_obj)
 ```
 
+Change the shape of the point cloud, using Fortran-like index order. Since the symmetry points
+are duplicated, slice the array in half.
 ```
         # OAS expects x stripes.
         wing_pts = wing_pts.reshape((45, 33, 3), order='F')
@@ -209,6 +219,12 @@ Compute the degenerate geometry representation for the OpenVSP components, and o
         horiz_tail_pts = horiz_tail_pts[:17, :, :]
         vert_tail_pts = vert_tail_pts[:17, :, :]
 
+        # Reduce for testing. (See John Jasa's recommendations in the docs.)
+        if self.options['reduced']:
+            wing_pts = wing_pts[::2, ::4, :]
+            horiz_tail_pts = horiz_tail_pts[::2, :, :]
+            vert_tail_pts = vert_tail_pts[::2, :, :]
+
         # Flip around so that FEM normals yield positive areas.
         wing_pts = wing_pts[::-1, ::-1, :]
         horiz_tail_pts = horiz_tail_pts[::-1, ::-1, :]
@@ -218,32 +234,9 @@ Compute the degenerate geometry representation for the OpenVSP components, and o
         outputs['wing_mesh'] = wing_pts
         outputs['vert_tail_mesh'] = horiz_tail_pts
         outputs['horiz_tail_mesh'] = vert_tail_pts
-
-    def vsp_to_cuts(self, degen_obj: degen_geom.DegenGeom, plane: str = 'xz') -> [[float]]:
-        """
-        Outputs sectional cuts in (eta, xle, yle, zle, twist, chord)
-        :param degen_obj: degen geom object
-        :param plane: plane in which to calculate the incidence angle
-        :return:
-        """
-        # eta, xle, yle, zle, twist, chord
-        s: degen_geom.DegenStick = degen_obj.sticks[0]
-        ncuts = s.num_secs
-        data = []
-        for icut in range(ncuts):
-            inc_angle = float("nan")
-            if plane == 'xz':
-                inc_angle = np.rad2deg(np.arcsin((s.te[icut][2] - s.le[icut][2]) / s.chord[icut]))
-            elif plane == 'xy':
-                inc_angle = np.rad2deg(np.arcsin((s.te[icut][1] - s.le[icut][1]) / s.chord[icut]))
-
-            data.append(
-                f'{float(icut / (ncuts - 1))},{s.le[icut][0]},{s.le[icut][1]},{s.le[icut][2]},{inc_angle},{s.chord[icut]}')
-
-        return data
 ```
 
-Convert an OpenVSP degenerate geometry to an array of points using [itertools](https://docs.python.org/3/library/itertools.html).
+Convert an OpenVSP degenerate geometry to a NumPy N-dimensional array of points using [itertools](https://docs.python.org/3/library/itertools.html).
 ```
     def vsp_to_point_cloud(self, degen_obj: degen_geom.DegenGeom)->np.ndarray:
         npts = degen_obj.surf.num_pnts
@@ -257,7 +250,7 @@ Convert an OpenVSP degenerate geometry to an array of points using [itertools](h
         return points
 ```
 
-
+Set up and run the model.
 ```
 if __name__ == "__main__":
 
