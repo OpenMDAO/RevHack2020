@@ -1,4 +1,3 @@
-import numpy as np
 import openmdao.api as om
 from components.compute_pitch_angles_using_subproblem import ComputePitchAnglesUsingSubProblem
 from components.design_airfoil import DesignAirfoil
@@ -37,6 +36,3 @@ prob.setup()
 
 prob.set_val("wind_speeds", wind_speeds)
 prob.run_driver()
-
-prob.model.list_inputs(print_arrays=True)
-prob.model.list_outputs(print_arrays=True)
