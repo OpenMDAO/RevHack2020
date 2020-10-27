@@ -51,6 +51,7 @@ class VSPeCRM(om.ExplicitComponent):
             self.add_output('vert_tail_mesh', shape=(5, 5, 3), units='inch')
             self.add_output('horiz_tail_mesh', shape=(5, 5, 3), units='inch')
         else:
+            # Note: at present, OAS can't handle this size.
             self.add_output('wing_mesh', shape=(23, 33, 3), units='inch')
             self.add_output('vert_tail_mesh', shape=(33, 9, 3), units='inch')
             self.add_output('horiz_tail_mesh', shape=(33, 9, 3), units='inch')
@@ -58,7 +59,7 @@ class VSPeCRM(om.ExplicitComponent):
         self.declare_partials(of='*', wrt='*', method='fd')
 
     def compute(self, inputs, outputs, discrete_inputs=None, discrete_outputs=None):
-        # set values
+        # Set values.
         vsp.SetParmVal(self.vert_tail_id, "TotalArea", "WingGeom", inputs['vert_tail_area'][0])
         vsp.SetParmVal(self.horiz_tail_id, "TotalArea", "WingGeom", inputs['horiz_tail_area'][0])
         vsp.SetParmVal(self.wing_id, "TotalChord", "WingGeom", inputs['wing_cord'][0])
@@ -72,18 +73,16 @@ class VSPeCRM(om.ExplicitComponent):
 
         # pull measurements out of degen_geom api
         degen_obj: degen_geom.DegenGeom = obj_dict[self.options['wing_name']]
-        #wing_cuts = self.vsp_to_cuts(degen_obj, plane='xz')
         wing_cloud = self.vsp_to_point_cloud(degen_obj)
 
         degen_obj: degen_geom.DegenGeom = obj_dict[self.options['horiz_tail_name']]
-        #horiz_tail_cuts = self.vsp_to_cuts(degen_obj, plane='xz')
         horiz_cloud = self.vsp_to_point_cloud(degen_obj)
 
         degen_obj: degen_geom.DegenGeom = obj_dict[self.options['vert_tail_name']]
-        #vert_tail_cuts = self.vsp_to_cuts(degen_obj, plane='xy')
         vert_cloud = self.vsp_to_point_cloud(degen_obj)
 
-        # OAS expects x stripes.
+        # VSP outputs wing outer mold lines at points along the span.
+        # Reshape to (chord, span, dimension)
         wing_cloud = wing_cloud.reshape((45, 33, 3), order='F')
         horiz_cloud = horiz_cloud.reshape((33, 9, 3), order='F')
         vert_cloud = vert_cloud.reshape((33, 9, 3), order='F')
@@ -96,7 +95,7 @@ class VSPeCRM(om.ExplicitComponent):
         vert_tail_pts = vert_cloud[:17, :, :]
         vert_tail_pts[1:-1, :, 1] = 0.5 * (vert_cloud[-2:-17:-1, :, 1] + vert_tail_pts[1:-1, :, 1])
 
-        # Reduce for testing. (See John Jasa's recommendations in the docs.)
+        # Reduce the mesh size for testing. (See John Jasa's recommendations in the docs.)
         if self.options['reduced']:
             wing_pts = wing_pts[:, ::4, :]
             wing_pts = wing_pts[[0, 4, 8, 12, 16, 22], ...]
@@ -112,29 +111,6 @@ class VSPeCRM(om.ExplicitComponent):
         outputs['wing_mesh'] = wing_pts
         outputs['vert_tail_mesh'] = vert_tail_pts
         outputs['horiz_tail_mesh'] = horiz_tail_pts
-
-    def vsp_to_cuts(self, degen_obj: degen_geom.DegenGeom, plane: str = 'xz') -> [[float]]:
-        """
-        Outputs sectional cuts in (eta, xle, yle, zle, twist, chord)
-        :param degen_obj: degen geom object
-        :param plane: plane in which to calculate the incidence angle
-        :return:
-        """
-        # eta, xle, yle, zle, twist, chord
-        s: degen_geom.DegenStick = degen_obj.sticks[0]
-        ncuts = s.num_secs
-        data = []
-        for icut in range(ncuts):
-            inc_angle = float("nan")
-            if plane == 'xz':
-                inc_angle = np.rad2deg(np.arcsin((s.te[icut][2] - s.le[icut][2]) / s.chord[icut]))
-            elif plane == 'xy':
-                inc_angle = np.rad2deg(np.arcsin((s.te[icut][1] - s.le[icut][1]) / s.chord[icut]))
-
-            data.append(
-                f'{float(icut / (ncuts - 1))},{s.le[icut][0]},{s.le[icut][1]},{s.le[icut][2]},{inc_angle},{s.chord[icut]}')
-
-        return data
 
     def vsp_to_point_cloud(self, degen_obj: degen_geom.DegenGeom)->np.ndarray:
         npts = degen_obj.surf.num_pnts
@@ -169,6 +145,8 @@ if __name__ == "__main__":
     for item in ['wing_mesh', 'vert_tail_mesh', 'horiz_tail_mesh']:
         data[item] = p.get_val(f"vsp_comp.{item}", units='m')
 
+    # Save the meshes in a pickle. These will become the undeformed baseline meshes in
+    # OpenAeroStruct.
     with open('baseline_meshes_reduced.pkl', 'wb') as f:
         pickle.dump(data, f)
 

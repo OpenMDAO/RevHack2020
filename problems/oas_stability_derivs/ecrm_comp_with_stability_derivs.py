@@ -12,7 +12,6 @@ from openaerostruct.integration.aerostruct_groups import AerostructPoint
 from openaerostruct.utils.constants import grav_constant
 
 from aerostruct_vsp_groups import AerostructGeometries
-from vsp_eCRM import VSPeCRM
 
 
 class ECRM(om.ExplicitComponent):
