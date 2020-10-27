@@ -1,18 +1,16 @@
 """
-OpenMDAO model file prototyping the eCRM analysis that can be used to calculate stability derivatives.
+OpenMDAO optimization of eCRM design subject to stability derivative constraints.
+
+This model is best run in MPI with 3 processors.
 """
 import pickle
 
 import numpy as np
-import matplotlib.pylab as plt
 
 import openmdao.api as om
-
-from openaerostruct.integration.aerostruct_groups import AerostructPoint
 from openaerostruct.utils.constants import grav_constant
 
-from aerostruct_vsp_groups import AerostructGeometries
-from vsp_eCRM import VSPeCRM
+from ecrm_comp_with_stability_derivs import ECRM
 
 
 #Read baseline mesh
@@ -159,81 +157,110 @@ vert_tail_surface = {
     'exact_failure_constraint' : False, # if false, use KS function
 }
 
-surfaces = [wing_surface, horiz_tail_surface, vert_tail_surface]
-#surfaces = [vert_tail_surface]
 
 prob = om.Problem()
 model = prob.model
 
-# Using manual indepvarcomp because of some promote errors in OAS if I omit it.
-indep_var_comp = om.IndepVarComp()
-indep_var_comp.add_output('v', val=248.136, units='m/s')
-indep_var_comp.add_output('alpha', val=0.0, units='deg')
-indep_var_comp.add_output('beta', val=0.0, units='deg')
-indep_var_comp.add_output('Mach_number', val=0.1)                   # 70 mph approx. TODO: make exact
-indep_var_comp.add_output('re', val=1.0e6, units='1/m')
-indep_var_comp.add_output('rho', val=0.38, units='kg/m**3')
-indep_var_comp.add_output('CT', val=grav_constant * 17.e-6, units='1/s')
-indep_var_comp.add_output('R', val=11.165e6, units='m')
-indep_var_comp.add_output('W0', val=0.4 * 3e5,  units='kg')
-indep_var_comp.add_output('speed_of_sound', val=295.4, units='m/s')
-indep_var_comp.add_output('load_factor', val=1.)
-indep_var_comp.add_output('empty_cg', val=np.array([262.614, 0.0, 115.861]), units='m')
+par = model.add_subsystem('par', om.ParallelGroup(), promotes=['*'])
 
-prob.model.add_subsystem('prob_vars', indep_var_comp, promotes=['*'])
+design_inputs = ['wing_cord', 'vert_tail_area', 'horiz_tail_area']
+common_settings = ['beta', 're', 'rho', 'CT', 'R', 'W0', 'load_factor', 'speed_of_sound', 'empty_cg']
 
-model.add_subsystem('geo', AerostructGeometries(surfaces=surfaces),
-                    promotes_inputs=['wing_cord', 'vert_tail_area', 'horiz_tail_area'])
+#par.add_subsystem('ecrm_70', ECRM(wing_surface=wing_surface,
+                                  #horiz_tail_surface=horiz_tail_surface,
+                                  #vert_tail_surface=vert_tail_surface),
+                  #promotes_inputs=design_inputs + common_settings)
 
-# Create the aero point group, which contains the actual aerodynamic
-# analyses
-aero_struct_group = AerostructPoint(surfaces=surfaces)
-prob.model.add_subsystem('aero', aero_struct_group,
-                         promotes_inputs=['v', 'alpha', 'beta', 'Mach_number', 're', 'rho',
-                                          'CT', 'R', 'W0', 'speed_of_sound', 'load_factor',
-                                          'empty_cg'])
+par.add_subsystem('ecrm_150', ECRM(wing_surface=wing_surface,
+                                   horiz_tail_surface=horiz_tail_surface,
+                                   vert_tail_surface=vert_tail_surface),
+                  promotes_inputs=design_inputs + common_settings)
 
-# Mesh Connections for AeroStruct
-for surface in surfaces:
-    name = surface['name']
+#par.add_subsystem('ecrm_200', ECRM(wing_surface=wing_surface,
+                                   #horiz_tail_surface=horiz_tail_surface,
+                                   #vert_tail_surface=vert_tail_surface),
+                  #promotes_inputs=design_inputs + common_settings)
 
-    prob.model.connect(f'geo.{name}.local_stiff_transformed', f'aero.coupled.{name}.local_stiff_transformed')
-    prob.model.connect(f'geo.{name}.nodes', f'aero.coupled.{name}.nodes')
+# Objective: Maximize L/D @ 150 mph
+model.add_subsystem('l_over_d', om.ExecComp('val = -CL / CD'))
+model.connect('ecrm_150.CL', 'l_over_d.CL')
+model.connect('ecrm_150.CD', 'l_over_d.CD')
+model.add_objective('l_over_d.val')
 
-    ## Connect aerodyamic mesh to coupled group mesh
-    prob.model.connect(f'geo.{name}_mesh', f'aero.coupled.{name}.mesh')
+# Constraint: -CM_α/CL_α > 0.0
+#model.add_subsystem('con_alpha_70', om.ExecComp('val = -CMa / CLa'))
+#model.connect('ecrm_70.CM_alpha', 'con_alpha_70.CMa')
+#model.connect('ecrm_70.CL_alpha', 'con_alpha_70.CLa')
+#model.add_constraint('con_alpha_70.val', lower=0.0)
 
-    ## Connect performance calculation variables
-    for vname in ['radius', 'thickness', 'nodes']:
-        prob.model.connect(f'geo.{name}.{vname}', f'aero.{name}_perf.{vname}')
+model.add_subsystem('con_alpha_150', om.ExecComp('val = -CMa / CLa'))
+model.connect('ecrm_150.CM_alpha', 'con_alpha_150.CMa')
+model.connect('ecrm_150.CL_alpha', 'con_alpha_150.CLa')
+model.add_constraint('con_alpha_150.val', lower=0.0)
 
-    for vname in ['cg_location', 'structural_mass', ]:
-        prob.model.connect(f'geo.{name}.{vname}', f'aero.total_perf.{name}_{vname}')
+#model.add_subsystem('con_alpha_200', om.ExecComp('val = -CMa / CLa'))
+#model.connect('ecrm_200.CM_alpha', 'con_alpha_200.CMa')
+#model.connect('ecrm_200.CL_alpha', 'con_alpha_200.CLa')
+#model.add_constraint('con_alpha_200.val', lower=0.0)
 
-    prob.model.connect(f'geo.{name}:t_over_c', f'aero.{name}_perf.t_over_c')
+# Constraint: CN_β > 0.0
+#model.add_constraint('ecrm_70.CN_beta', lower=0.0)
+model.add_constraint('ecrm_150.CN_beta', lower=0.0)
+#model.add_constraint('ecrm_200.CN_beta', lower=0.0)
 
-prob.setup(force_alloc_complex=True)
+# Constraint: CL < 1.3
+#model.add_constraint('ecrm_70.CL', upper=1.3)
+model.add_constraint('ecrm_150.CL', upper=1.3)
+#model.add_constraint('ecrm_200.CL', upper=1.3)
 
-# Initial conditions
-#prob.set_val('v', val=248.136, units='m/s')
-#prob.set_val('alpha', val=0.0, units='deg')
-#prob.set_val('Mach_number', val=0.1)                   # 70 mph approx. TODO: make exact
-#prob.set_val('re', val=1.0e6, units='1/m')
-#prob.set_val('rho', val=0.38, units='kg/m**3')
-#prob.set_val('cg', val=np.zeros((3)), units='m')
+# Constraint: CL = W/qS
+#model.add_constraint('ecrm_70.L_equals_W', equals=0.0)
+model.add_constraint('ecrm_150.L_equals_W', equals=0.0)
+#model.add_constraint('ecrm_200.L_equals_W', equals=0.0)
 
-# This stuff only when we don't have the geo turned on.
-#prob.set_val('aero.wing.def_mesh', wing_mesh)
-#prob.set_val('aero.aero_states.wing_def_mesh', wing_mesh)
+# Design Variables
+model.add_design_var('wing_cord', lower=45.0, upper=75.0)
+model.add_design_var('vert_tail_area', lower=1500.0, upper=3000.0)
+model.add_design_var('horiz_tail_area', lower=4500, upper=7500)
+#model.add_design_var('ecrm_70.alpha', lower=0.0, upper=12.0)
+model.add_design_var('ecrm_150.alpha', lower=0.0, upper=12.0)
+#model.add_design_var('ecrm_200.alpha', lower=0.0, upper=12.0)
 
-# Solver settings
-#prob.model.aero.coupled.nonlinear_solver.options['maxiter'] = 300
+prob.driver = om.pyOptSparseDriver()
+prob.driver.options['optimizer'] = "SNOPT"
+prob.driver.options['debug_print'] = ['desvars', 'nl_cons', 'objs']
+prob.driver.opt_settings['Major feasibility tolerance'] = 1e-5
 
-prob.run_model()
+prob.setup()
 
-wrt = ['alpha', 'beta', 'wing_cord', 'vert_tail_area', 'horiz_tail_area']
-of = ['aero.CL', 'aero.CD', 'aero.CM']
+# Set Initial Conditions
+prob.set_val('beta', 0.0, units='deg')
+prob.set_val('re', 1.0e6, units='1/m')
+prob.set_val('rho', 0.38, units='kg/m**3')
+prob.set_val('CT', grav_constant * 17.e-6, units='1/s')
+prob.set_val('R', 11.165e6, units='m')
+prob.set_val('W0', 0.4 * 3e5,  units='kg')
+prob.set_val('load_factor', 1.)
+prob.set_val('speed_of_sound', 767.0, units='mi/h')
+prob.set_val('empty_cg', np.array([262.614, 0.0, 115.861]), units='inch')
 
-totals = prob.compute_totals(of=of, wrt=wrt)
-print(totals)
+# Set Initial Conditions 70 mph model
+#prob.set_val('ecrm_70.v', 70.0, units='mi/h')
+#prob.set_val('ecrm_70.Mach_number', 70.0/767)
+
+# Set Initial Conditions 150 mph model
+prob.set_val('ecrm_150.v', 150.0, units='mi/h')
+prob.set_val('ecrm_150.Mach_number', 150.0/767)
+prob.set_val('ecrm_150.alpha', 1.5)
+
+# Set Initial Conditions 200 mph model
+#prob.set_val('ecrm_200.v', 200.0, units='mi/h')
+#prob.set_val('ecrm_200.Mach_number', 200.0/767)
+
+#prob.run_model()
+#z=prob.check_totals()
+
+prob.run_driver()
+
+prob.list_problem_vars()
 print('done')
