@@ -1,20 +1,9 @@
 """
-Driver for a differential evolution genetic algorithm.
-
-TODO: add better references than: https://en.wikipedia.org/wiki/Differential_evolution
-
-Most of this driver (except execute_ga) is based on SimpleGA, so the following may still apply:
-
-The following reference is only for the penalty function:
-Smith, A. E., Coit, D. W. (1995) Penalty functions. In: Handbook of Evolutionary Computation, 97(1).
-
-The following reference is only for weighted sum multi-objective optimization:
-Sobieszczanski-Sobieski, J., Morris, A. J., van Tooren, M. J. L. (2015)
-Multidisciplinary Design Optimization Supported by Knowledge Based Engineering.
-John Wiley & Sons, Ltd.
+Driver that uses Covariance Matrix Adaptation Evolution Strategy (CMAES).
 """
 import os
 import copy
+import time
 
 import numpy as np
 
@@ -458,6 +447,12 @@ class CMAES(object):
         else:
             # Running parallel, use OO interface
 
+            # make sure all procs have the same seed
+            seed = CMAOptions['seed']
+            if comm.rank == 0 and (not isinstance(seed, int) or seed == 0):
+                seed = int(time.time())
+            CMAOptions['seed'] = comm.bcast(seed, root=0)
+
             optim = cma.CMAEvolutionStrategy(x0, sigma0, CMAOptions)
 
             stop = False
@@ -488,12 +483,13 @@ class CMAES(object):
                         print('A case failed:')
                         print(traceback)
 
-                # do the "update" work, pass f-values and prepare for next iteration
+                # do the "update", pass f-values and prepare for next iteration
                 optim.tell(X, f)
                 optim.disp(20)       # display info every 20th iteration
                 optim.logger.add()   # log another "data line", non-standard
 
                 # gather stop conditions, stop if any proc stops
+                # (all procs should have the same stop condition)
                 stops = comm.allgather(optim.stop())
                 for proc_stop in stops:
                     if len(proc_stop) > 0:
