@@ -120,7 +120,7 @@ import openvsp as vsp
 import degen_geom
 ```
 
-Create a new subclass based on OpenMDAO [ExplicitComponent](http://openmdao.org/twodocs/versions/latest/features/core_features/defining_components/explicitcomp.html). Set some [options]http://openmdao.org/twodocs/versions/latest/features/core_features/defining_components/options.html with the names of the geometries in the VSP project that we want to work with.
+Create a new subclass based on OpenMDAO [ExplicitComponent](http://openmdao.org/twodocs/versions/latest/features/core_features/defining_components/explicitcomp.html). Set some [options](http://openmdao.org/twodocs/versions/latest/features/core_features/defining_components/options.html) with the names of the geometries in the VSP project that we want to work with.
 ```
 class VSPeCRM(om.ExplicitComponent):
 
@@ -151,7 +151,7 @@ Load the OpenVSP project from a VSP3 file and find the IDs of the geometries.
         self.vert_tail_id = vsp.FindGeomsWithName(vert_tail_name)[0]
 ```
 
-Set up inputs with initial values.
+Set up inputs with initial values, and outputs with units and 3-dimensional shapes. Use the finite difference approximation method for partial derivatives.
 ```
         self.add_input('wing_cord', val=59.05128,)
         self.add_input('vert_tail_area', val=2295.)
@@ -199,11 +199,6 @@ Set up inputs with initial values.
         horiz_tail_pts = horiz_tail_pts[:17, :, :]
         vert_tail_pts = vert_tail_pts[:17, :, :]
 
-        # Reduce for testing.
-        if self.options['reduced']:
-            wing_pts = wing_pts[::2, ::4, :]
-            horiz_tail_pts = horiz_tail_pts[::2, :, :]
-            vert_tail_pts = vert_tail_pts[::2, :, :]
 
         # Flip around so that FEM normals yield positive areas.
         wing_pts = wing_pts[::-1, ::-1, :]
