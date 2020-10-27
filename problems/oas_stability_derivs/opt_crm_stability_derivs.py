@@ -257,6 +257,9 @@ prob.set_val('ecrm_150.alpha', 1.5)
 #prob.set_val('ecrm_200.v', 200.0, units='mi/h')
 #prob.set_val('ecrm_200.Mach_number', 200.0/767)
 
+#prob.run_model()
+#z=prob.check_totals()
+
 prob.run_driver()
 
 prob.list_problem_vars()
