@@ -111,14 +111,17 @@ git clone --depth=1 https://github.com/OpenVSP/OpenVSP.git repo
 OpenMDAO component wrapper for a VSP model of a modified CRM (eCRM-001) that will be used to demonstrate the
 computation and use of stability derivatives in a design problem.
 
+Required modules:
 ```
 import itertools
-import pickle
 import numpy as np
 import openmdao.api as om
 import openvsp as vsp
 import degen_geom
+```
 
+Create a new subclass based on OpenMDAO [ExplicitComponent](http://openmdao.org/twodocs/versions/latest/features/core_features/defining_components/explicitcomp.html). Set some [options]http://openmdao.org/twodocs/versions/latest/features/core_features/defining_components/options.html with the names of the geometries in the VSP project that we want to work with.
+```
 class VSPeCRM(om.ExplicitComponent):
 
     def initialize(self):
@@ -128,9 +131,10 @@ class VSPeCRM(om.ExplicitComponent):
                              desc="Name of the vertical tail in the vsp model.")
         self.options.declare('wing_name', default='Wing',
                              desc="Name of the wing in the vsp model.")
-        self.options.declare('reduced', default=False,
-                             desc="When True, output reduced meshes instead of full-size ones.")
+```
 
+Load the OpenVSP project from a VSP3 file and find the IDs of the geometries.
+```
     def setup(self):
         options = self.options
         horiz_tail_name = options['horiz_tail_name']
@@ -145,23 +149,23 @@ class VSPeCRM(om.ExplicitComponent):
         self.wing_id = vsp.FindGeomsWithName(wing_name)[0]
         self.horiz_tail_id = vsp.FindGeomsWithName(horiz_tail_name)[0]
         self.vert_tail_id = vsp.FindGeomsWithName(vert_tail_name)[0]
+```
 
+Set up inputs with initial values.
+```
         self.add_input('wing_cord', val=59.05128,)
         self.add_input('vert_tail_area', val=2295.)
         self.add_input('horiz_tail_area', val=6336.)
 
         # Shapes are pre-determined.
-        if reduced:
-            self.add_output('wing_mesh', shape=(12, 9, 3), units='inch')
-            self.add_output('vert_tail_mesh', shape=(9, 9, 3), units='inch')
-            self.add_output('horiz_tail_mesh', shape=(9, 9, 3), units='inch')
-        else:
-            self.add_output('wing_mesh', shape=(23, 33, 3), units='inch')
-            self.add_output('vert_tail_mesh', shape=(33, 9, 3), units='inch')
-            self.add_output('horiz_tail_mesh', shape=(33, 9, 3), units='inch')
+        self.add_output('wing_mesh', shape=(23, 33, 3), units='inch')
+        self.add_output('vert_tail_mesh', shape=(33, 9, 3), units='inch')
+        self.add_output('horiz_tail_mesh', shape=(33, 9, 3), units='inch')
 
         self.declare_partials(of='*', wrt='*', method='fd')
+```
 
+```
     def compute(self, inputs, outputs, discrete_inputs=None, discrete_outputs=None):
         # set values
         vsp.SetParmVal(self.vert_tail_id, "TotalArea", "WingGeom", inputs['vert_tail_area'][0])
@@ -195,7 +199,7 @@ class VSPeCRM(om.ExplicitComponent):
         horiz_tail_pts = horiz_tail_pts[:17, :, :]
         vert_tail_pts = vert_tail_pts[:17, :, :]
 
-        # Reduce for testing. (See John Jasa's recommendations in the docs.)
+        # Reduce for testing.
         if self.options['reduced']:
             wing_pts = wing_pts[::2, ::4, :]
             horiz_tail_pts = horiz_tail_pts[::2, :, :]
@@ -244,7 +248,6 @@ class VSPeCRM(om.ExplicitComponent):
         points[:, 2] = list(itertools.chain.from_iterable(degen_obj.surf.z))
 
         return points
-
 
 if __name__ == "__main__":
 
