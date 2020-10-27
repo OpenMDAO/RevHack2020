@@ -568,7 +568,7 @@ class TestConstrainedCMAESDriver(unittest.TestCase):
         self.assertAlmostEqual(prob['height'], 0.5, 1)  # it is going to the unconstrained optimum
 
 
-@unittest.skip("Running CMAES in parallel is not yet supported.")
+# @unittest.skip("Running CMAES in parallel is not yet supported.")
 @unittest.skipUnless(MPI and PETScVector, "MPI and PETSc are required.")
 class MPITestCMAESDriver(unittest.TestCase):
     N_PROCS = 2
@@ -685,7 +685,7 @@ class Summer(om.ExplicitComponent):
         outputs['obj'] = np.sum(inputs['y1']) + np.sum(inputs['y2'])
 
 
-@unittest.skip("Running CMAES in parallel is not yet supported.")
+# @unittest.skip("Running CMAES in parallel is not yet supported.")
 @unittest.skipUnless(MPI and PETScVector, "MPI and PETSc are required.")
 class MPITestCMAESDriver4Procs(unittest.TestCase):
     N_PROCS = 4
@@ -922,7 +922,7 @@ class TestFeatureCMAESDriver(unittest.TestCase):
         self.assertGreater(prob['height'], 1.)
 
 
-@unittest.skip("Running CMAES in parallel is not yet supported.")
+# @unittest.skip("Running CMAES in parallel is not yet supported.")
 @unittest.skipUnless(MPI and PETScVector, "MPI and PETSc are required.")
 class MPIFeatureTests(unittest.TestCase):
     N_PROCS = 2
@@ -959,7 +959,7 @@ class MPIFeatureTests(unittest.TestCase):
             print('p1.xC', prob['p1.xC'])
 
 
-@unittest.skip("Running CMAES in parallel is not yet supported.")
+# @unittest.skip("Running CMAES in parallel is not yet supported.")
 @unittest.skipUnless(MPI and PETScVector, "MPI and PETSc are required.")
 class MPIFeatureTests4(unittest.TestCase):
     N_PROCS = 4
@@ -1001,7 +1001,11 @@ class MPIFeatureTests4(unittest.TestCase):
         prob.setup()
         prob.run_driver()
 
-        # Optimal solution
+        # Optimal solution from DifferentialEvolutionDriver:
+        #   comp.f [0.80220303]
+        #   p2.xI [3.11628575]
+        #   p1.xC [2.28300608]
+
         if extra_prints:
             print('comp.f', prob['comp.f'])
             print('p2.xI', prob['p2.xI'])

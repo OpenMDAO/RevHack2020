@@ -189,7 +189,7 @@ class CMAESDriver(Driver):
 
     def run(self):
         """
-        Execute the genetic algorithm.
+        Execute the CMA-ES algorithm.
 
         Returns
         -------
@@ -434,7 +434,7 @@ class CMAES(object):
         self.objfun = objfun
         self.CMAOptions = cma.CMAOptions()
 
-    def execute(self, x0, vlb, vub, sigma0, pop_size, verbose, random_state):
+    def execute(self, x0, vlb, vub, sigma0, pop_size, verbose, random_state=99):
         """
         Execute the CMA Evolution Strategy.
 
@@ -462,9 +462,16 @@ class CMAES(object):
         float
             Objective value at best design point.
         """
+        self.CMAOptions['bounds'] = [vlb, vub]
+        self.CMAOptions['verbose'] = verbose
+        self.CMAOptions['seed'] = random_state
+        if pop_size:
+            self.CMAOptions['popsize'] = pop_size
+
         comm = self.comm
 
         if comm is None:
+            # Running non-parallel, use functional interface
 
             self.CMAOptions['bounds'] = [vlb, vub]
             self.CMAOptions['verbose'] = verbose
@@ -478,15 +485,53 @@ class CMAES(object):
             return res[0], res[1]
 
         else:
-            # FIXME:  run in parallel
+            # Running parallel, use OO interface
 
-            self.CMAOptions['bounds'] = [vlb, vub]
-            self.CMAOptions['verbose'] = verbose
-            if random_state:
-                self.CMAOptions['seed'] = random_state
-            if pop_size:
-                self.CMAOptions['popsize'] = pop_size
+            optim = cma.CMAEvolutionStrategy(x0, sigma0, self.CMAOptions)
 
-            res = cma.fmin(self.objfun, x0, sigma0, options=self.CMAOptions)
+            stop = False
 
-            return res[0], res[1]
+            while not stop:  # optim.stop():
+                # get candidate solutions
+                X = optim.ask()
+
+                # pad candidates to make them divisible into procs.
+                cases = [((item, ), None) for ii, item in enumerate(X)]
+                extra = len(cases) % comm.size
+                if extra > 0:
+                    for j in range(comm.size - extra):
+                        cases.append(cases[-1])
+
+                # evaluate candidate solutions concurrently
+                results = concurrent_eval(self.objfun, cases, comm,
+                                          allgather=True, model_mpi=self.model_mpi)
+
+                # assemble solutions corresponding to X
+                f = []
+                for i in range(len(X)):
+                    returns, traceback = results[i]
+                    if returns:
+                        f.append(returns)
+                    else:
+                        # Print the traceback if it fails
+                        print('A case failed:')
+                        print(traceback)
+
+                # do the "update" work, pass f-values and prepare for next iteration
+                optim.tell(X, f)
+                optim.disp(20)       # display info every 20th iteration
+                optim.logger.add()   # log another "data line", non-standard
+
+                # gather stop conditions, stop if any proc stops
+                stops = comm.allgather(optim.stop())
+                for proc_stop in stops:
+                    if len(proc_stop) > 0:
+                        stop = True
+
+            # final output
+            print('termination by', stops)
+            print('best f-value =', optim.result[1])
+            print('best solution =', optim.result[0])
+            # optim.logger.plot()  # if matplotlib is available
+
+            return optim.result[0], optim.result[1]
