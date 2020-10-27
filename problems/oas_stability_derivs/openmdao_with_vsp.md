@@ -169,6 +169,7 @@ Set up inputs with initial values, and outputs with units and 3-dimensional shap
             self.add_output('vert_tail_mesh', shape=(5, 5, 3), units='inch')
             self.add_output('horiz_tail_mesh', shape=(5, 5, 3), units='inch')
         else:
+            # Note: at present, OAS can't handle this size.
             self.add_output('wing_mesh', shape=(23, 33, 3), units='inch')
             self.add_output('vert_tail_mesh', shape=(33, 9, 3), units='inch')
             self.add_output('horiz_tail_mesh', shape=(33, 9, 3), units='inch')
@@ -205,16 +206,14 @@ Compute the degenerate geometry representation for the OpenVSP components, and o
         vert_cloud = self.vsp_to_point_cloud(degen_obj)
 ```
 
-Change the shape of the point cloud to be able to use with OpenAeroStuct, using Fortran-like index order.
+The purpose of this RevHack exercise was to use OpenAeroStruct, so here the meshes are updated to work with it.
 ```
-        # OAS expects x stripes.
+        # VSP outputs wing outer mold lines at points along the span.
+        # Reshape to (chord, span, dimension)
         wing_cloud = wing_cloud.reshape((45, 33, 3), order='F')
         horiz_cloud = horiz_cloud.reshape((33, 9, 3), order='F')
         vert_cloud = vert_cloud.reshape((33, 9, 3), order='F')
-```
 
-
-```
         # Meshes have upper and lower surfaces, so we average the z (or y for vertical).
         wing_pts = wing_cloud[:23, :, :]
         wing_pts[1:-1, :, 2] = 0.5 * (wing_cloud[-2:-23:-1, :, 2] + wing_pts[1:-1, :, 2])
@@ -223,7 +222,7 @@ Change the shape of the point cloud to be able to use with OpenAeroStuct, using 
         vert_tail_pts = vert_cloud[:17, :, :]
         vert_tail_pts[1:-1, :, 1] = 0.5 * (vert_cloud[-2:-17:-1, :, 1] + vert_tail_pts[1:-1, :, 1])
 
-        # Reduce for testing. (See John Jasa's recommendations in the docs.)
+        # Reduce the mesh size for testing. (See John Jasa's recommendations in the docs.)
         if self.options['reduced']:
             wing_pts = wing_pts[:, ::4, :]
             wing_pts = wing_pts[[0, 4, 8, 12, 16, 22], ...]
@@ -241,7 +240,7 @@ Change the shape of the point cloud to be able to use with OpenAeroStuct, using 
         outputs['horiz_tail_mesh'] = vert_tail_pts
 ```
 
-Convert an OpenVSP degenerate geometry to a NumPy N-dimensional array of points using [itertools](https://docs.python.org/3/library/itertools.html).
+Convert an OpenVSP degenerate geometry to a [NumPy N-dimensional array](https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html) of points using [itertools](https://docs.python.org/3/library/itertools.html).
 ```
     def vsp_to_point_cloud(self, degen_obj: degen_geom.DegenGeom)->np.ndarray:
         npts = degen_obj.surf.num_pnts
@@ -275,12 +274,14 @@ if __name__ == "__main__":
     p.run_model()
 ```
 
-Serialize and save the data for later use.
+Serialize and save the data for later use in OpenAeroStruct.
 ```
     data = {}
     for item in ['wing_mesh', 'vert_tail_mesh', 'horiz_tail_mesh']:
         data[item] = p.get_val(f"vsp_comp.{item}", units='m')
 
+    # Save the meshes in a pickle. These will become the undeformed baseline meshes in
+    # OpenAeroStruct.
     with open('baseline_meshes_reduced.pkl', 'wb') as f:
         pickle.dump(data, f)
 
