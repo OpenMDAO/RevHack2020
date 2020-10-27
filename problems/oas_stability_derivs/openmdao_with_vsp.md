@@ -108,7 +108,7 @@ git clone --depth=1 https://github.com/OpenVSP/OpenVSP.git repo
  In your Python environment, run `pip install 'openmdao[all]'`
 
 ### Sample Code
-This is an OpenMDAO component wrapper for a VSP model of a modified CRM (eCRM-001) that is used to demonstrate the computation and use of stability derivatives in a design problem. This code is based on a sample provided used during [OpenMDAO RevHack 2020](https://github.com/OpenMDAO/RevHack2020).
+This is an OpenMDAO component wrapper for a VSP model of a modified CRM (eCRM-001) that is used to demonstrate the computation and use of stability derivatives in a design problem. This code is based on a sample provided during [OpenMDAO RevHack 2020](https://github.com/OpenMDAO/RevHack2020).
 
 Required modules:
 ```
@@ -123,7 +123,7 @@ import openvsp as vsp
 import degen_geom
 ```
 
-Create a new subclass based on OpenMDAO [ExplicitComponent](http://openmdao.org/twodocs/versions/latest/features/core_features/defining_components/explicitcomp.html). Set some [options](http://openmdao.org/twodocs/versions/latest/features/core_features/defining_components/options.html) with the names of the geometries in the VSP project that we want to work with. The `reduced` option reduces processing time for testing purposes.
+Create a new subclass based on OpenMDAO [ExplicitComponent](http://openmdao.org/twodocs/versions/latest/features/core_features/defining_components/explicitcomp.html). Set some [options](http://openmdao.org/twodocs/versions/latest/features/core_features/defining_components/options.html) with the names of the geometries in the VSP project that we want to work with. The `reduced` option is helpful for testing purposes.
 ```
 class VSPeCRM(om.ExplicitComponent):
 
@@ -206,7 +206,7 @@ Compute the degenerate geometry representation for the OpenVSP components, and o
         vert_cloud = self.vsp_to_point_cloud(degen_obj)
 ```
 
-The purpose of this RevHack exercise was to use OpenAeroStruct, so here the meshes are updated to work with it.
+The purpose of this RevHack exercise was to use OpenAeroStruct, so update the meshes to work with it.
 ```
         # VSP outputs wing outer mold lines at points along the span.
         # Reshape to (chord, span, dimension)
