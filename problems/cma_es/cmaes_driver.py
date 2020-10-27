@@ -40,8 +40,9 @@ class CMAESDriver(Driver):
     _concurrent_color : int
         Color of current rank when running a parallel model.
     _desvar_idx : dict
-        Keeps track of the indices for each desvar, since CMAES sees an array of
-        design variables.
+        Keeps track of the indices for each desvar.
+    CMAOptions : CMAOptions
+        Options for CMAES execution.
     _cmaes : <CMAES>
         CMAES object.
     _randomstate : np.random.RandomState, int
@@ -75,11 +76,11 @@ class CMAESDriver(Driver):
 
         self._desvar_idx = {}
 
+        self.CMAOptions = cma.CMAOptions()
+
         # random state can be set for predictability during testing
         if 'CMAESDriver_seed' in os.environ:
-            self._randomstate = int(os.environ['CMAESDriver_seed'])
-        else:
-            self._randomstate = None
+            self.CMAOptions['seed'] = int(os.environ['CMAESDriver_seed'])
 
         # Support for Parallel models.
         self._concurrent_pop_size = 0
@@ -89,15 +90,10 @@ class CMAESDriver(Driver):
         """
         Declare options before kwargs are processed in the init method.
         """
-        self.options.declare('pop_size', default=None,
-                             desc='population size, AKA lambda, number of new solution per iteration.'
-                                  'default: 4+int(3*np.log(N))')
         self.options.declare('sigma0', default=.1, types=float,
                              desc='Initial standard deviation in each coordinate. '
                                   'sigma0 should be about 1/4th of the search domain width '
                                   '(where the optimum is to be expected).')
-        self.options.declare('verbose', default=-9,
-                             desc='Verbosity of CMAES (-1 is very quiet, -9 maximally quiet).')
         self.options.declare('run_parallel', types=bool, default=False,
                              desc='Set to True to execute the points in a generation in parallel.')
         self.options.declare('procs_per_model', default=1, lower=1,
@@ -219,11 +215,9 @@ class CMAESDriver(Driver):
             upper_bound[i:j] = meta['upper']
             x0[i:j] = desvar_vals[name]
 
-        desvar_new, obj = self._cmaes.execute(x0, lower_bound, upper_bound,
-                                              self.options['sigma0'],
-                                              self.options['pop_size'],
-                                              self.options['verbose'],
-                                              self._randomstate)
+        self.CMAOptions['bounds'] = [lower_bound, upper_bound]
+
+        desvar_new, obj = self._cmaes.execute(x0, self.options['sigma0'], self.CMAOptions)
 
         # Pull optimal parameters back into framework and re-run, so that
         # framework is left in the right final state
@@ -405,12 +399,8 @@ class CMAES(object):
         If the model in objfun is also parallel, then this will contain a tuple with the the
         total number of population points to evaluate concurrently, and the color of the point
         to evaluate on this rank.
-    pop_size : int
-        Population size.
     objfun : function
         Objective function callback.
-    CMAOptions : CMAOptions
-        Options for CMAES execution.
     """
 
     def __init__(self, objfun, comm=None, model_mpi=None):
@@ -430,11 +420,9 @@ class CMAES(object):
         """
         self.comm = comm
         self.model_mpi = model_mpi
-
         self.objfun = objfun
-        self.CMAOptions = cma.CMAOptions()
 
-    def execute(self, x0, vlb, vub, sigma0, pop_size, verbose, random_state=99):
+    def execute(self, x0, sigma0, CMAOptions):
         """
         Execute the CMA Evolution Strategy.
 
@@ -448,12 +436,8 @@ class CMAES(object):
             Upper bounds array.
         sigma0 : float
             Initial standard deviation in each coordinate.
-        pop_size : int
-            Number of points in the population.
-        verbose : int
-            verbosity e.g. of initial/final message, -1 is very quiet, -9 maximally quiet
-        random_state : np.random.RandomState, int
-            Random state (or seed-number) which controls the seed and random draws.
+        CMAOptions : CMAOptions
+            Options for CMAES execution.
 
         Returns
         -------
@@ -462,32 +446,19 @@ class CMAES(object):
         float
             Objective value at best design point.
         """
-        self.CMAOptions['bounds'] = [vlb, vub]
-        self.CMAOptions['verbose'] = verbose
-        self.CMAOptions['seed'] = random_state
-        if pop_size:
-            self.CMAOptions['popsize'] = pop_size
-
         comm = self.comm
 
         if comm is None:
             # Running non-parallel, use functional interface
 
-            self.CMAOptions['bounds'] = [vlb, vub]
-            self.CMAOptions['verbose'] = verbose
-            if random_state:
-                self.CMAOptions['seed'] = random_state
-            if pop_size:
-                self.CMAOptions['popsize'] = pop_size
-
-            res = cma.fmin(self.objfun, x0, sigma0, options=self.CMAOptions)
+            res = cma.fmin(self.objfun, x0, sigma0, options=CMAOptions)
 
             return res[0], res[1]
 
         else:
             # Running parallel, use OO interface
 
-            optim = cma.CMAEvolutionStrategy(x0, sigma0, self.CMAOptions)
+            optim = cma.CMAEvolutionStrategy(x0, sigma0, CMAOptions)
 
             stop = False
 

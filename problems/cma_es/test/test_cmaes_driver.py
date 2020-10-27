@@ -66,7 +66,7 @@ class TestCMAESDriver(unittest.TestCase):
         prob.model.add_objective('rastrigin.y')
 
         prob.driver = CMAESDriver()
-        prob.driver.options['verbose'] = -9  # silence output
+        prob.driver.CMAOptions['verbose'] = -9  # silence output
 
         prob.setup()
         prob.run_driver()
@@ -105,7 +105,7 @@ class TestCMAESDriver(unittest.TestCase):
         prob.model.add_objective('rosenbrock.y')
 
         prob.driver = CMAESDriver()
-        prob.driver.options['verbose'] = -9  # silence output
+        prob.driver.CMAOptions['verbose'] = -9  # silence output
 
         prob.setup()
         prob.run_driver()
@@ -152,7 +152,7 @@ class TestCMAESDriver(unittest.TestCase):
         prob.model.add_objective('obj.f')
 
         prob.driver = CMAESDriver()
-        prob.driver.options['verbose'] = -9  # silence output
+        prob.driver.CMAOptions['verbose'] = -9  # silence output
 
         prob.setup()
 
@@ -184,8 +184,8 @@ class TestCMAESDriver(unittest.TestCase):
         prob.model.add_objective('comp.f')
 
         prob.driver = CMAESDriver()
-        prob.driver.options['pop_size'] = 25
-        prob.driver.options['verbose'] = -9  # silence output
+        prob.driver.CMAOptions['popsize'] = 25
+        prob.driver.CMAOptions['verbose'] = -9  # silence output
 
         prob.setup()
         # prob.run_driver()
@@ -207,7 +207,7 @@ class TestCMAESDriver(unittest.TestCase):
         prob.model.connect('indeps.y', 'paraboloid2.y')
 
         prob.driver = CMAESDriver()
-        prob.driver.options['verbose'] = -9  # silence output
+        prob.driver.CMAOptions['verbose'] = -9  # silence output
 
         prob.model.add_design_var('indeps.x', lower=-5, upper=5)
         prob.model.add_design_var('indeps.y', lower=[-10, 0], upper=[10, 3])
@@ -235,7 +235,7 @@ class TestCMAESDriver(unittest.TestCase):
         prob.model.add_subsystem('f_x', Paraboloid(), promotes=['*'])
 
         prob.driver = CMAESDriver()
-        prob.driver.options['verbose'] = -9  # silence output
+        prob.driver.CMAOptions['verbose'] = -9  # silence output
 
         prob.model.add_design_var('x', lower=0)
         prob.model.add_constraint('x', lower=0)
@@ -260,7 +260,7 @@ class TestCMAESDriver(unittest.TestCase):
         prob.model.add_subsystem('g_x', om.ExecComp('g_x = 1 - x', x=np.ones(dim), g_x=np.zeros(dim)), promotes=['*'])
 
         prob.driver = CMAESDriver()
-        prob.driver.options['verbose'] = -9  # silence output
+        prob.driver.CMAOptions['verbose'] = -9  # silence output
 
         prob.model.add_design_var('x', lower=-10, upper=10)
         prob.model.add_objective('f_x')
@@ -314,7 +314,7 @@ class TestMultiObjectiveCMAESDriver(unittest.TestCase):
 
         # setup the optimization
         prob.driver = CMAESDriver()
-        prob.driver.options['verbose'] = -9  # silence output
+        prob.driver.CMAOptions['verbose'] = -9  # silence output
 
         prob.driver.options['multi_obj_exponent'] = 1.
         prob.driver.options['penalty_parameter'] = 10.
@@ -356,7 +356,7 @@ class TestMultiObjectiveCMAESDriver(unittest.TestCase):
 
         # setup the optimization
         prob2.driver = CMAESDriver()
-        prob2.driver.options['verbose'] = -9  # silence output
+        prob2.driver.CMAOptions['verbose'] = -9  # silence output
 
         prob2.driver.options['multi_obj_exponent'] = 1.
         prob2.driver.options['penalty_parameter'] = 10.
@@ -422,7 +422,7 @@ class TestConstrainedCMAESDriver(unittest.TestCase):
 
         # setup the optimization
         driver = prob.driver = CMAESDriver()
-        prob.driver.options['verbose'] = -9  # silence output
+        prob.driver.CMAOptions['verbose'] = -9  # silence output
 
         prob.driver.options['penalty_parameter'] = 3.
         prob.driver.options['penalty_exponent'] = 1.
@@ -454,7 +454,7 @@ class TestConstrainedCMAESDriver(unittest.TestCase):
 
         # setup the optimization
         driver = prob.driver = CMAESDriver()
-        prob.driver.options['verbose'] = -9  # silence output
+        prob.driver.CMAOptions['verbose'] = -9  # silence output
 
         with self.assertRaises(KeyError) as raises_msg:
             prob.driver.supports['equality_constraints'] = False
@@ -492,7 +492,7 @@ class TestConstrainedCMAESDriver(unittest.TestCase):
 
         # setup the optimization
         driver = prob.driver = CMAESDriver()
-        prob.driver.options['verbose'] = -9  # silence output
+        prob.driver.CMAOptions['verbose'] = -9  # silence output
 
         prob.driver.options['penalty_parameter'] = 0.  # no penalty, same as unconstrained
         prob.driver.options['penalty_exponent'] = 1.
@@ -544,7 +544,7 @@ class TestConstrainedCMAESDriver(unittest.TestCase):
 
         # setup the optimization
         driver = prob.driver = CMAESDriver()
-        prob.driver.options['verbose'] = -9  # silence output
+        prob.driver.CMAOptions['verbose'] = -9  # silence output
 
         prob.driver.options['penalty_parameter'] = 10.  # will have no effect
         prob.driver.options['penalty_exponent'] = 1.
@@ -586,7 +586,7 @@ class MPITestCMAESDriver(unittest.TestCase):
         prob.model.add_objective('obj')
 
         prob.driver = CMAESDriver(run_parallel=True)
-        prob.driver.options['verbose'] = -9  # silence output
+        prob.driver.CMAOptions['verbose'] = -9  # silence output
 
         prob.setup()
         prob.set_solver_print(level=0)
@@ -699,7 +699,7 @@ class MPITestCMAESDriver4Procs(unittest.TestCase):
         model.add_subsystem('par', om.ParallelGroup())
 
         prob.driver = CMAESDriver()
-        prob.driver.options['verbose'] = -9  # silence output
+        prob.driver.CMAOptions['verbose'] = -9  # silence output
 
         prob.driver.options['run_parallel'] = True
         prob.driver.options['procs_per_model'] = 3
@@ -735,8 +735,8 @@ class MPITestCMAESDriver4Procs(unittest.TestCase):
         prob.model = GAGroup()
 
         driver = prob.driver = CMAESDriver()
-        prob.driver.options['verbose'] = -9  # silence output
-        prob.driver.options['pop_size'] = 40
+        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        prob.driver.CMAOptions['popsize'] = 40
 
         driver.options['run_parallel'] = True
 
@@ -763,8 +763,8 @@ class MPITestCMAESDriver4Procs(unittest.TestCase):
         model.add_objective('obj')
 
         driver = prob.driver = CMAESDriver()
-        prob.driver.options['verbose'] = -9  # silence output
-        prob.driver.options['pop_size'] = 4
+        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        prob.driver.CMAOptions['popsize'] = 4
 
         prob.driver.options['run_parallel'] = True
         prob.driver.options['procs_per_model'] = 2
@@ -797,8 +797,8 @@ class MPITestCMAESDriver4Procs(unittest.TestCase):
         model.add_objective('f_xy')
 
         prob.driver = CMAESDriver()
-        prob.driver.options['verbose'] = -9  # silence output
-        prob.driver.options['pop_size'] = 10
+        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        prob.driver.CMAOptions['popsize'] = 10
 
         prob.driver.options['run_parallel'] = True
         prob.driver.options['procs_per_model'] = 2
@@ -832,7 +832,7 @@ class TestFeatureCMAESDriver(unittest.TestCase):
         model.add_objective('comp.f')
 
         prob.driver = CMAESDriver()
-        prob.driver.options['verbose'] = -9  # silence output
+        prob.driver.CMAOptions['verbose'] = -9  # silence output
 
         prob.setup()
         prob.run_driver()
@@ -848,7 +848,7 @@ class TestFeatureCMAESDriver(unittest.TestCase):
         model.add_objective('comp.f')
 
         prob.driver = CMAESDriver()
-        prob.driver.options['verbose'] = -9  # silence output
+        prob.driver.CMAOptions['verbose'] = -9  # silence output
 
         prob.setup()
         prob.run_driver()
@@ -870,13 +870,11 @@ class TestFeatureCMAESDriver(unittest.TestCase):
         model.add_objective('comp.f')
 
         prob.driver = CMAESDriver()
-        prob.driver.options['verbose'] = -9  # silence output
-        prob.driver.options['pop_size'] = 10
+        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        prob.driver.CMAOptions['popsize'] = 10
 
         prob.setup()
         prob.run_driver()
-
-        self.assertEqual(prob.driver._cmaes.CMAOptions['popsize'], 10)
 
     def test_constrained_with_penalty(self):
         class Cylinder(om.ExplicitComponent):
@@ -903,7 +901,7 @@ class TestFeatureCMAESDriver(unittest.TestCase):
 
         # setup the optimization
         prob.driver = CMAESDriver()
-        prob.driver.options['verbose'] = -9  # silence output
+        prob.driver.CMAOptions['verbose'] = -9  # silence output
 
         prob.driver.options['penalty_parameter'] = 3.
         prob.driver.options['penalty_exponent'] = 1.
@@ -946,7 +944,7 @@ class MPIFeatureTests(unittest.TestCase):
         model.add_objective('comp.f')
 
         prob.driver = CMAESDriver()
-        prob.driver.options['verbose'] = -9  # silence output
+        prob.driver.CMAOptions['verbose'] = -9  # silence output
         prob.driver.options['run_parallel'] = True
 
         prob.setup()
@@ -992,8 +990,8 @@ class MPIFeatureTests4(unittest.TestCase):
         model.add_objective('comp.f')
 
         prob.driver = CMAESDriver()
-        # prob.driver.options['verbose'] = -9  # silence output
-        prob.driver.options['pop_size'] = 25
+        # prob.driver.CMAOptions['verbose'] = -9  # silence output
+        prob.driver.CMAOptions['popsize'] = 25
 
         prob.driver.options['run_parallel'] = True
         prob.driver.options['procs_per_model'] = 2
