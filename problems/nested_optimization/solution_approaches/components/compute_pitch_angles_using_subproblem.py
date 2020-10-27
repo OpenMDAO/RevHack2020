@@ -12,13 +12,11 @@ def compute_power_constraint(pitch_angle, wind_speed, drag_modifier, P_rated):
     return neg_power + P_rated
 
 class ComputePower(om.ExplicitComponent):
-    def initialize(self):
-        self.options.declare("P_rated")
-
     def setup(self):
         self.add_input("pitch_angle", 0.0)
         self.add_input("wind_speed", 0.0)
         self.add_input("drag_modifier", 0.0)
+        self.add_input("P_rated", 0.0)
 
         self.add_output("power")
         self.add_output("power_constraint")
@@ -29,18 +27,18 @@ class ComputePower(om.ExplicitComponent):
             inputs["wind_speed"],
             inputs["drag_modifier"])
 
-        P_rated = self.options["P_rated"]
-
         outputs["power_constraint"] = compute_power_constraint(
             inputs["pitch_angle"],
             inputs["wind_speed"],
             inputs["drag_modifier"],
-            P_rated)
+            inputs["P_rated"])
 
 class ComputePitchAnglesUsingSubProblem(om.ExplicitComponent):
+
     def initialize(self):
         self.options.declare("size")
         self.options.declare("P_rated")
+        self._problem = None
 
     def setup(self):
         size = self.options["size"]
@@ -56,36 +54,38 @@ class ComputePitchAnglesUsingSubProblem(om.ExplicitComponent):
         P_rated = self.options["P_rated"]
         drag_modifier = inputs["drag_modifier"]
 
-        prob = om.Problem()
-        prob.model.add_subsystem(
-            "compute_power",
-            ComputePower(P_rated=P_rated),
-            promotes=["*"],
-        )
+        if self._problem is None:
+            prob = om.Problem()
+            self._problem = prob
+            prob.model.add_subsystem(
+                "compute_power",
+                ComputePower(),
+                promotes=["*"],
+            )
 
-        prob.driver = om.ScipyOptimizeDriver()
-        prob.driver.options["optimizer"] = "SLSQP"
-        prob.model.approx_totals(method="fd")
+            prob.driver = om.ScipyOptimizeDriver()
+            prob.driver.options["optimizer"] = "COBYLA"
+            prob.model.approx_totals(method="fd")
 
-        prob.model.add_design_var("pitch_angle", lower=-15.0, upper=15.0)
+            prob.model.add_design_var("pitch_angle", lower=-15.0, upper=15.0)
+            prob.model.add_constraint("power_constraint", lower=0.0)
+            prob.model.add_objective("power")
 
-        # scipy minimize ineq constraint:
-        #    "inequality means that it is to be non-negative"
-        # So this is the OpenMDAO equivalent
-        prob.model.add_constraint("power_constraint", lower=0.0)
-        prob.model.add_objective("power")
+            prob.setup()
 
-        prob.setup()
+        prob = self._problem
         prob.set_val("drag_modifier", drag_modifier)
+        prob.set_val("P_rated", P_rated)
 
-        ## Problem sub
         for i, wind_speed in enumerate(inputs["wind_speeds"]):
-
             prob.set_val("wind_speed", wind_speed)
+            print("inputs before run", prob["pitch_angle"], prob["wind_speed"], prob["drag_modifier"], prob["P_rated"])
             prob.run_driver()
-
             outputs["pitch_angles"][i] = prob["pitch_angle"]
             outputs["powers"][i] = prob["power"]
+
+            prob.model.list_inputs()
+            prob.model.list_outputs()
 
         outputs["total_power"] = np.sum(outputs["powers"])
 
