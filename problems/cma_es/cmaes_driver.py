@@ -42,10 +42,10 @@ class CMAESDriver(Driver):
     _desvar_idx : dict
         Keeps track of the indices for each desvar, since CMAES sees an array of
         design variables.
-    _ga : <CMAES>
-        Main genetic algorithm lies here.
+    _cmaes : <CMAES>
+        CMAES object.
     _randomstate : np.random.RandomState, int
-         Random state (or seed-number) which controls the seed and random draws.
+        Random state (or seed-number) which controls the seed.
     """
 
     def __init__(self, **kwargs):
@@ -73,9 +73,6 @@ class CMAESDriver(Driver):
         self.supports['distributed_design_vars'] = False
         self.supports._read_only = True
 
-        # expose CMAOptions
-        self.CMAOptions = cma.CMAOptions()
-
         self._desvar_idx = {}
 
         # random state can be set for predictability during testing
@@ -92,15 +89,15 @@ class CMAESDriver(Driver):
         """
         Declare options before kwargs are processed in the init method.
         """
-        self.options.declare('sigma0', default=.1,types=float,
+        self.options.declare('pop_size', default=None,
+                             desc='population size, AKA lambda, number of new solution per iteration.'
+                                  'default: 4+int(3*np.log(N))')
+        self.options.declare('sigma0', default=.1, types=float,
                              desc='Initial standard deviation in each coordinate. '
                                   'sigma0 should be about 1/4th of the search domain width '
                                   '(where the optimum is to be expected).')
-        self.options.declare('max_gen', default=100,
-                             desc='Number of generations before termination.')
-        self.options.declare('pop_size', default=0,
-                             desc='Number of points in the GA. Set to 0 and it will be computed '
-                             'as 20 times the total number of inputs.')
+        self.options.declare('verbose', default=-9,
+                             desc='Verbosity of CMAES (-1 is very quiet, -9 maximally quiet).')
         self.options.declare('run_parallel', types=bool, default=False,
                              desc='Set to True to execute the points in a generation in parallel.')
         self.options.declare('procs_per_model', default=1, lower=1,
@@ -137,6 +134,8 @@ class CMAESDriver(Driver):
         elif not self.options['run_parallel']:
             comm = None
 
+        self._cmaes = CMAES(self.objective_callback, comm=comm, model_mpi=model_mpi)
+
     def _setup_comm(self, comm):
         """
         Perform any driver-specific setup of communicators for the model.
@@ -159,10 +158,10 @@ class CMAESDriver(Driver):
             full_size = comm.size
             size = full_size // procs_per_model
             if full_size != size * procs_per_model:
-                raise RuntimeError("The total number of processors is not evenly divisible by the "
-                                   "specified number of processors per model.\n Provide a "
-                                   "number of processors that is a multiple of %d, or "
-                                   "specify a number of processors per model that divides "
+                raise RuntimeError("The total number of processors is not evenly divisible "
+                                   "by the specified number of processors per model.\n "
+                                   "Provide a number of processors that is a multiple of %d, "
+                                   "or specify a number of processors per model that divides "
                                    "into %d." % (procs_per_model, full_size))
             color = comm.rank % size
             model_comm = comm.Split(color)
@@ -197,11 +196,6 @@ class CMAESDriver(Driver):
         boolean
             Failure flag; True if failed to converge, False is successful.
         """
-        model = self._problem().model
-
-        pop_size = self.options['pop_size']
-        max_gen = self.options['max_gen']
-
         self._check_for_missing_objective()
 
         # Size design variables.
@@ -225,21 +219,11 @@ class CMAESDriver(Driver):
             upper_bound[i:j] = meta['upper']
             x0[i:j] = desvar_vals[name]
 
-        abs2prom = model._var_abs2prom['output']
-
-        # Automatic population size.
-        if pop_size == 0:
-            pop_size = 20 * count
-
-        self.CMAOptions['bounds'] = [lower_bound, upper_bound]
-
-        if self._randomstate:
-            self.CMAOptions['seed'] = self._randomstate
-
-        res = cma.fmin(self.objective_callback, x0, self.options['sigma0'],
-                       options=self.CMAOptions)
-
-        desvar_new = res[0]
+        desvar_new, obj = self._cmaes.execute(x0, lower_bound, upper_bound,
+                                              self.options['sigma0'],
+                                              self.options['pop_size'],
+                                              self.options['verbose'],
+                                              self._randomstate)
 
         # Pull optimal parameters back into framework and re-run, so that
         # framework is left in the right final state
@@ -249,7 +233,7 @@ class CMAESDriver(Driver):
             self.set_design_var(name, val)
 
         with RecordingDebugging(self._get_name(), self.iter_count, self) as rec:
-            model.run_solve_nonlinear()
+            self._problem().model.run_solve_nonlinear()
             rec.abs = 0.0
             rec.rel = 0.0
         self.iter_count += 1
@@ -407,3 +391,102 @@ class CMAESDriver(Driver):
             rec.rel = 0.0
 
         return fun
+
+
+class CMAES(object):
+    """
+    CMA Evolution Strategy.
+
+    Attributes
+    ----------
+    comm : MPI communicator or None
+        The MPI communicator that will be used objective evaluation for each generation.
+    model_mpi : None or tuple
+        If the model in objfun is also parallel, then this will contain a tuple with the the
+        total number of population points to evaluate concurrently, and the color of the point
+        to evaluate on this rank.
+    pop_size : int
+        Population size.
+    objfun : function
+        Objective function callback.
+    CMAOptions : CMAOptions
+        Options for CMAES execution.
+    """
+
+    def __init__(self, objfun, comm=None, model_mpi=None):
+        """
+        Initialize CMA Evolution Strategy object.
+
+        Parameters
+        ----------
+        objfun : function
+            Objective callback function.
+        comm : MPI communicator or None
+            The MPI communicator that will be used objective evaluation.
+        model_mpi : None or tuple
+            If the model in objfun is also parallel, then this will contain a tuple with the the
+            total number of population points to evaluate concurrently, and the color of the point
+            to evaluate on this rank.
+        """
+        self.comm = comm
+        self.model_mpi = model_mpi
+
+        self.objfun = objfun
+        self.CMAOptions = cma.CMAOptions()
+
+    def execute(self, x0, vlb, vub, sigma0, pop_size, verbose, random_state):
+        """
+        Execute the CMA Evolution Strategy.
+
+        Parameters
+        ----------
+        x0 : ndarray
+            Initial design values
+        vlb : ndarray
+            Lower bounds array.
+        vub : ndarray
+            Upper bounds array.
+        sigma0 : float
+            Initial standard deviation in each coordinate.
+        pop_size : int
+            Number of points in the population.
+        verbose : int
+            verbosity e.g. of initial/final message, -1 is very quiet, -9 maximally quiet
+        random_state : np.random.RandomState, int
+            Random state (or seed-number) which controls the seed and random draws.
+
+        Returns
+        -------
+        ndarray
+            Best design point
+        float
+            Objective value at best design point.
+        """
+        comm = self.comm
+
+        if comm is None:
+
+            self.CMAOptions['bounds'] = [vlb, vub]
+            self.CMAOptions['verbose'] = verbose
+            if random_state:
+                self.CMAOptions['seed'] = random_state
+            if pop_size:
+                self.CMAOptions['popsize'] = pop_size
+
+            res = cma.fmin(self.objfun, x0, sigma0, options=self.CMAOptions)
+
+            return res[0], res[1]
+
+        else:
+            # FIXME:  run in parallel
+
+            self.CMAOptions['bounds'] = [vlb, vub]
+            self.CMAOptions['verbose'] = verbose
+            if random_state:
+                self.CMAOptions['seed'] = random_state
+            if pop_size:
+                self.CMAOptions['popsize'] = pop_size
+
+            res = cma.fmin(self.objfun, x0, sigma0, options=self.CMAOptions)
+
+            return res[0], res[1]
