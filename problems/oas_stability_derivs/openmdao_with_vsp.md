@@ -155,7 +155,7 @@ Load the OpenVSP project from a VSP3 file and find the IDs of the relevant geome
         self.vert_tail_id = vsp.FindGeomsWithName(vert_tail_name)[0]
 ```
 
-Set up inputs with initial values, and outputs with units and 3-dimensional shapes. Use the finite difference approximation method for partial derivatives.
+Set up inputs with initial values, and outputs with units and 3-dimensional shapes. Here we use the finite difference approximation method for partial derivatives.
 ```
         self.add_input('wing_cord', val=59.05128,)
         self.add_input('vert_tail_area', val=2295.)
