@@ -23,7 +23,8 @@ class VSPeCRM(om.ExplicitComponent):
         self.options.declare('wing_name', default='Wing',
                              desc="Name of the wing in the vsp model.")
         self.options.declare('reduced', default=False,
-                             desc="When True, output reduced meshes instead of full-size ones.")
+                             desc="When True, output reduced meshes instead of full-size ones. "
+                             "Running with a smaller mesh is of value when debugging.")
 
     def setup(self):
         options = self.options
@@ -101,12 +102,12 @@ class VSPeCRM(om.ExplicitComponent):
         # Flip around so that FEM normals yield positive areas.
         wing_pts = wing_pts[::-1, ::-1, :]
         horiz_tail_pts = horiz_tail_pts[::-1, ::-1, :]
-        vert_tail_pts = vert_tail_pts[::-1, ::-1, :]
+        vert_tail_pts = vert_tail_pts[:, ::-1, :]
 
         # outputs go here
         outputs['wing_mesh'] = wing_pts
-        outputs['vert_tail_mesh'] = horiz_tail_pts
-        outputs['horiz_tail_mesh'] = vert_tail_pts
+        outputs['vert_tail_mesh'] = vert_tail_pts
+        outputs['horiz_tail_mesh'] = horiz_tail_pts
 
     def vsp_to_cuts(self, degen_obj: degen_geom.DegenGeom, plane: str = 'xz') -> [[float]]:
         """
