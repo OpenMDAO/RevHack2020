@@ -113,9 +113,13 @@ computation and use of stability derivatives in a design problem.
 
 Required modules:
 ```
+import pickle
 import itertools
+
 import numpy as np
+
 import openmdao.api as om
+
 import openvsp as vsp
 import degen_geom
 ```
@@ -133,7 +137,7 @@ class VSPeCRM(om.ExplicitComponent):
                              desc="Name of the wing in the vsp model.")
 ```
 
-Load the OpenVSP project from a VSP3 file and find the IDs of the geometries.
+Load the OpenVSP project from a VSP3 file and find the IDs of the relevant geometries.
 ```
     def setup(self):
         options = self.options
@@ -165,6 +169,7 @@ Set up inputs with initial values, and outputs with units and 3-dimensional shap
         self.declare_partials(of='*', wrt='*', method='fd')
 ```
 
+Compute the OpenVSP meshes. Using the previously located geometries, set the values of the VSP parameters to the initial input values from `setup()`. Then, reset the OpenVSP model to a blank slate with `Update()`.
 ```
     def compute(self, inputs, outputs, discrete_inputs=None, discrete_outputs=None):
         # set values
@@ -174,7 +179,10 @@ Set up inputs with initial values, and outputs with units and 3-dimensional shap
 
         vsp.Update()
         vsp.Update()  # just in case..
+```
 
+Compute the degenerate geometry representation for the OpenVSP components, and obtain the measurements.
+```
         # run degen geom to get measurements
         dg:degen_geom.DegenGeomMgr = vsp.run_degen_geom(set_index=vsp.SET_ALL)
         obj_dict = {p.name:p for p in dg.get_all_objs()}
@@ -188,7 +196,9 @@ Set up inputs with initial values, and outputs with units and 3-dimensional shap
 
         degen_obj: degen_geom.DegenGeom = obj_dict[self.options['vert_tail_name']]
         vert_tail_pts = self.vsp_to_point_cloud(degen_obj)
+```
 
+```
         # OAS expects x stripes.
         wing_pts = wing_pts.reshape((45, 33, 3), order='F')
         horiz_tail_pts = horiz_tail_pts.reshape((33, 9, 3), order='F')
@@ -198,7 +208,6 @@ Set up inputs with initial values, and outputs with units and 3-dimensional shap
         wing_pts = wing_pts[:23, :, :]
         horiz_tail_pts = horiz_tail_pts[:17, :, :]
         vert_tail_pts = vert_tail_pts[:17, :, :]
-
 
         # Flip around so that FEM normals yield positive areas.
         wing_pts = wing_pts[::-1, ::-1, :]
@@ -232,7 +241,10 @@ Set up inputs with initial values, and outputs with units and 3-dimensional shap
                 f'{float(icut / (ncuts - 1))},{s.le[icut][0]},{s.le[icut][1]},{s.le[icut][2]},{inc_angle},{s.chord[icut]}')
 
         return data
+```
 
+Convert an OpenVSP degenerate geometry to an array of points using [itertools](https://docs.python.org/3/library/itertools.html).
+```
     def vsp_to_point_cloud(self, degen_obj: degen_geom.DegenGeom)->np.ndarray:
         npts = degen_obj.surf.num_pnts
         n_xsecs = degen_obj.surf.num_secs
@@ -243,7 +255,10 @@ Set up inputs with initial values, and outputs with units and 3-dimensional shap
         points[:, 2] = list(itertools.chain.from_iterable(degen_obj.surf.z))
 
         return points
+```
 
+
+```
 if __name__ == "__main__":
 
     vsp_comp = VSPeCRM(horiz_tail_name="Tail",
