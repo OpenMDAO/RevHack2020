@@ -431,6 +431,12 @@ class Dynamics(om.ExplicitComponent):
         self.add_output('energy_dot', val=np.ones(nn))
 
         self.add_output('acc', val=np.ones(nn))
+        self.add_output('CL', val=np.ones(nn))
+        self.add_output('CD', val=np.ones(nn))
+        self.add_output('L_wings', val=np.ones(nn))
+        self.add_output('D_wings', val=np.ones(nn))
+        self.add_output('atov', val=np.ones(nn))
+        self.add_output('D_fuse', val=np.ones(nn))        
         self.add_output('aoa', val=np.ones(nn))
         self.add_output('thrust', val=np.ones(nn))
         self.add_output('vi', val=np.ones(nn))
@@ -510,6 +516,7 @@ class Dynamics(om.ExplicitComponent):
                                                                 self.n_props * Normal_F)
 
         # compute horizontal and vertical changes in velocity
+        outputs['atov'] = atov
         outputs['x_dot'] = vx
         outputs['y_dot'] = vy
         outputs['vx_dot'] = (thrust * np.sin(theta) - D_fuse * np.sin(atov) - D_wings * np.sin(theta + aoa_blown) - L * np.cos(theta + aoa_blown) - Normal_F * np.cos(theta)) / self.m
@@ -517,6 +524,11 @@ class Dynamics(om.ExplicitComponent):
         outputs['energy_dot'] = power
 
         outputs['acc'] = np.sqrt(outputs['vx_dot']**2 + outputs['vy_dot']**2) / 9.81
+        outputs['CL'] = CL
+        outputs['CD'] = CD
+        outputs['L_wings'] = L
+        outputs['D_wings'] = D_wings
+        outputs['D_fuse'] = D_wings
         outputs['aoa'] = aoa_blown
         outputs['thrust'] = thrust
         outputs['vi'] = vi
