@@ -15,6 +15,7 @@ energy = sol.get_val('traj.phase0.timeseries.states:energy')
 
 time_exp = sim.get_val('traj.phase0.timeseries.time')
 power_exp = sim.get_val('traj.phase0.timeseries.controls:power')
+
 x_exp = sim.get_val('traj.phase0.timeseries.states:x')
 y_exp = sim.get_val('traj.phase0.timeseries.states:y')
 energy_exp = sim.get_val('traj.phase0.timeseries.states:energy')
@@ -22,6 +23,13 @@ energy_exp = sim.get_val('traj.phase0.timeseries.states:energy')
 fix, ax = plt.subplots(1, 1)
 ax.plot(time, power, 'ro')
 ax.plot(time_exp, power_exp, 'b-')
+import numpy as np
+ax.plot(np.linspace(0, 28.368, 20),
+         [207161.23632379, 239090.09259429, 228846.07476655, 228171.35928472,
+          203168.64876755, 214967.45622033, 215557.60195517, 224144.75074625,
+          234546.06852611, 248761.85655837, 264579.96329677, 238568.31766929,
+          238816.66768314, 236739.41494728, 244041.61634308, 242472.86320043,
+          239606.77670727, 277307.47563171, 225369.8825676 , 293871.23097611], 'k--')
 
 fix, ax = plt.subplots(1, 1)
 ax.plot(x, y, 'ro')

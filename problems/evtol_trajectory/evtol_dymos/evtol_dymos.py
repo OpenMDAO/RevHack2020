@@ -55,7 +55,7 @@ if __name__ == '__main__':
     traj = dm.Trajectory()
     p.model.add_subsystem('traj', traj)
 
-    phase = dm.Phase(transcription=dm.GaussLobatto(num_segments=5, solve_segments=False),
+    phase = dm.Phase(transcription=dm.Radau(num_segments=5, order=3, solve_segments=True, compressed=False),
                      ode_class=Dynamics,
                      ode_init_kwargs={'input_dict': input_dict})
 
@@ -72,7 +72,7 @@ if __name__ == '__main__':
     phase.add_control('theta', lower = 0., upper =3*np.pi/4, scaler=1.2)
 
     # Objective
-    phase.add_objective('energy', loc='final', scaler=2e-7)
+    phase.add_objective('energy', loc='final', ref=1E6)
 
     # Boundary Constraints
     phase.add_boundary_constraint('y', loc='final', lower=305, scaler=3e-3)  # Constraint for the final vertical displacement
@@ -82,7 +82,8 @@ if __name__ == '__main__':
     # Path Constraints
     phase.add_path_constraint('y', lower=0., upper=305, ref=300)  # Constraint for the minimum vertical displacement
     phase.add_path_constraint('acc', upper=0.3, scaler=4.)  # Constraint for the acceleration magnitude
-    phase.add_path_constraint('aoa', lower=-10, upper=10, ref0=-10, ref=10)  # Constraint for the acceleration magnitude
+    phase.add_path_constraint('aoa', lower=-15, upper=15, ref0=-10, ref=10)  # Constraint for the acceleration magnitude
+    phase.add_path_constraint('thrust', lower=10, ref=10)  # Constraint for the thrust magnitude
 
     # Setup the driver
     p.driver = om.pyOptSparseDriver()
@@ -91,26 +92,46 @@ if __name__ == '__main__':
     p.driver.opt_settings['Major feasibility tolerance'] = 1e-7
     p.driver.opt_settings['Major iterations limit'] = 1000
     p.driver.opt_settings['Minor iterations limit'] = 100000
+    # p.driver.opt_settings['Verify level'] = 3
     p.driver.opt_settings['iSumm'] = 6
 
-    # p.driver.declare_coloring(tol=1.0E-1)
+    # p.driver.options['optimizer'] = "IPOPT"
+    # p.driver.opt_settings['nlp_scaling_method'] = 'gradient-based'
+    # p.driver.opt_settings['print_level'] = 5
+
+    p.driver.declare_coloring(tol=1.0E-8)
 
     p.add_recorder(om.SqliteRecorder("solution.sql"))
 
     p.setup()
 
     p.set_val('traj.phase0.t_initial', 0.0)
-    p.set_val('traj.phase0.t_duration', 10.0)
+    p.set_val('traj.phase0.t_duration', 30.0)
     p.set_val('traj.phase0.states:x', phase.interpolate(ys=[0, 900], nodes='state_input'))
     p.set_val('traj.phase0.states:y',  phase.interpolate(ys=[0, 300], nodes='state_input'))
     p.set_val('traj.phase0.states:vx', phase.interpolate(ys=[0, 20], nodes='state_input'))
     p.set_val('traj.phase0.states:vy', phase.interpolate(ys=[0.01, 0.01], nodes='state_input'))
-    p.set_val('traj.phase0.states:energy', 0.0)
+    p.set_val('traj.phase0.states:energy', phase.interpolate(ys=[0, 1E6], nodes='state_input'))
     p.set_val('traj.phase0.controls:power', 200000.0)
-    p.set_val('traj.phase0.controls:theta', 0.05)
+    p.set_val('traj.phase0.controls:theta', phase.interpolate(ys=[0.05, np.radians(80)], nodes='control_input'))
+
+    p.set_val('traj.phase0.controls:power', phase.interpolate(xs=np.linspace(0, 28.368, 20),
+                                                              ys=[207161.23632379, 239090.09259429, 228846.07476655, 228171.35928472,
+       203168.64876755, 214967.45622033, 215557.60195517, 224144.75074625,
+       234546.06852611, 248761.85655837, 264579.96329677, 238568.31766929,
+       238816.66768314, 236739.41494728, 244041.61634308, 242472.86320043,
+       239606.77670727, 277307.47563171, 225369.8825676 , 293871.23097611], nodes='control_input'))
+    p.set_val('traj.phase0.controls:theta', phase.interpolate(xs=np.linspace(0, 28.368, 20),
+                                                              ys=[0.07188392, 0.17391331, 0.34028059, 0.5101345 , 0.66561472,
+       0.76287459, 0.84858573, 0.91466015, 0.96113079, 0.99573339,
+       1.00574242, 1.01472168, 1.03595189, 1.10451423, 1.16461664,
+       1.22062094, 1.28553096, 1.3307819 , 1.40092757, 1.43952015], nodes='control_input'))
 
 
-    p.run_driver()
+    dm.run_problem(p, refine_iteration_limit=0)
+    # p.run_model()
+    # with np.printoptions(linewidth=1024):
+    #     p.check_totals(compact_print=True)
 
     p.record('final')
 

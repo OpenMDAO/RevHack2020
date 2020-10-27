@@ -432,6 +432,8 @@ class Dynamics(om.ExplicitComponent):
 
         self.add_output('acc', val=np.ones(nn))
         self.add_output('aoa', val=np.ones(nn))
+        self.add_output('thrust', val=np.ones(nn))
+        self.add_output('vi', val=np.ones(nn))
         # if self.stall_option == 'ns':
         #     self.add_output('aoa_max', shape=np.ones(nn))
         #     self.add_output('aoa_min', shape=np.ones(nn))
@@ -516,6 +518,8 @@ class Dynamics(om.ExplicitComponent):
 
         outputs['acc'] = np.sqrt(outputs['vx_dot']**2 + outputs['vy_dot']**2) / 9.81
         outputs['aoa'] = aoa_blown
+        outputs['thrust'] = thrust
+        outputs['vi'] = vi
 
 
 if __name__ == '__main__':
@@ -588,14 +592,14 @@ if __name__ == '__main__':
     p.setup()
 
     p.set_val('traj.phase0.t_initial', 0.0)
-    p.set_val('traj.phase0.t_duration', 10.0)
-    p.set_val('traj.phase0.states:x', 0.0)
-    p.set_val('traj.phase0.states:y', 0.01)
+    p.set_val('traj.phase0.t_duration', 50.0)
+    p.set_val('traj.phase0.states:x', phase.interpolate(ys=[0, 900], nodes='state_input'))
+    p.set_val('traj.phase0.states:y', phase.interpolate(ys=[0, 300], nodes='state_input'))
     p.set_val('traj.phase0.states:vx', 0.01)
     p.set_val('traj.phase0.states:vy', 0.01)
     p.set_val('traj.phase0.states:energy', 0.0)
-    p.set_val('traj.phase0.controls:power', 150000.0)
-    p.set_val('traj.phase0.controls:theta', 0.05)
+    p.set_val('traj.phase0.controls:power', 300000.0)
+    p.set_val('traj.phase0.controls:theta', np.pi/2)
 
     p.run_model()
 
