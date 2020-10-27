@@ -84,21 +84,22 @@ class VerifyTest(unittest.TestCase):
 
         tol = 1e-6
 
-        assert_near_equal(prob['x_dot'], verify_data.x_dot[0:-1], 1e-6)
-        assert_near_equal(prob['y_dot'], verify_data.y_dot[0:-1], 1e-6)
+        assert_near_equal(prob['x_dot'], verify_data.x_dot[:-1], 1e-6)
+        assert_near_equal(prob['y_dot'], verify_data.y_dot[:-1], 1e-6)
 
 
         assert_near_equal(prob['a_x'], verify_data.a_x, 1e-6)
         assert_near_equal(prob['a_y'], verify_data.a_y, 1e-6)
         
-        # assert_near_equal(prob['thrust'], verify_data.thrusts[:-1], 1e-6)
-        # assert_near_equal(prob['atov'], verify_data.atov[:-1], 1e-6)
-        
-        # assert_near_equal(prob['CL'], verify_data.CL[:-1], 1e-6)
-        # assert_near_equal(prob['CD'], verify_data.CD[:-1], 1e-6)
+        assert_near_equal(prob['thrusts'], verify_data.thrusts[:-1], 1e-6)
+        assert_near_equal(prob['atov'], verify_data.atov[1:], 1e-6)
+    
 
-          # assert_near_equal(prob['L_wings'], verify_data.L_wings, 1e-6)
-        # assert_near_equal(prob['D_wings'], verify_data.D_wings, 1e-6)
+        assert_near_equal(prob['CL'], verify_data.CL[1:], 1e-6)
+        assert_near_equal(prob['CD'], verify_data.CD[1:], 1e-6)
+
+        assert_near_equal(prob['L_wings'], verify_data.L_wings, 1e-6)
+        assert_near_equal(prob['D_wings'], verify_data.D_wings, 1e-6)
 
 
             
