@@ -165,9 +165,9 @@ Set up inputs with initial values, and outputs with units and 3-dimensional shap
 
         # Shapes are pre-determined.
         if reduced:
-            self.add_output('wing_mesh', shape=(12, 9, 3), units='inch')
-            self.add_output('vert_tail_mesh', shape=(9, 9, 3), units='inch')
-            self.add_output('horiz_tail_mesh', shape=(9, 9, 3), units='inch')
+            self.add_output('wing_mesh', shape=(6, 9, 3), units='inch')
+            self.add_output('vert_tail_mesh', shape=(5, 5, 3), units='inch')
+            self.add_output('horiz_tail_mesh', shape=(5, 5, 3), units='inch')
         else:
             self.add_output('wing_mesh', shape=(23, 33, 3), units='inch')
             self.add_output('vert_tail_mesh', shape=(33, 9, 3), units='inch')
@@ -196,32 +196,39 @@ Compute the degenerate geometry representation for the OpenVSP components, and o
 
         # pull measurements out of degen_geom api
         degen_obj: degen_geom.DegenGeom = obj_dict[self.options['wing_name']]
-        wing_pts = self.vsp_to_point_cloud(degen_obj)
+        wing_cloud = self.vsp_to_point_cloud(degen_obj)
 
         degen_obj: degen_geom.DegenGeom = obj_dict[self.options['horiz_tail_name']]
-        horiz_tail_pts = self.vsp_to_point_cloud(degen_obj)
+        horiz_cloud = self.vsp_to_point_cloud(degen_obj)
 
         degen_obj: degen_geom.DegenGeom = obj_dict[self.options['vert_tail_name']]
-        vert_tail_pts = self.vsp_to_point_cloud(degen_obj)
+        vert_cloud = self.vsp_to_point_cloud(degen_obj)
 ```
 
-Change the shape of the point cloud for use with OpenAeroStuct, using Fortran-like index order. Since the symmetry points are duplicated, slice the array in half.
+Change the shape of the point cloud to be able to use with OpenAeroStuct, using Fortran-like index order.
 ```
         # OAS expects x stripes.
-        wing_pts = wing_pts.reshape((45, 33, 3), order='F')
-        horiz_tail_pts = horiz_tail_pts.reshape((33, 9, 3), order='F')
-        vert_tail_pts = vert_tail_pts.reshape((33, 9, 3), order='F')
+        wing_cloud = wing_cloud.reshape((45, 33, 3), order='F')
+        horiz_cloud = horiz_cloud.reshape((33, 9, 3), order='F')
+        vert_cloud = vert_cloud.reshape((33, 9, 3), order='F')
+```
 
-        # Meshes have symmetry pts duplicated (not mirrored.) Use half.
-        wing_pts = wing_pts[:23, :, :]
-        horiz_tail_pts = horiz_tail_pts[:17, :, :]
-        vert_tail_pts = vert_tail_pts[:17, :, :]
+
+```
+        # Meshes have upper and lower surfaces, so we average the z (or y for vertical).
+        wing_pts = wing_cloud[:23, :, :]
+        wing_pts[1:-1, :, 2] = 0.5 * (wing_cloud[-2:-23:-1, :, 2] + wing_pts[1:-1, :, 2])
+        horiz_tail_pts = horiz_cloud[:17, :, :]
+        horiz_tail_pts[1:-1, :, 2] = 0.5 * (horiz_cloud[-2:-17:-1, :, 2] + horiz_tail_pts[1:-1, :, 2])
+        vert_tail_pts = vert_cloud[:17, :, :]
+        vert_tail_pts[1:-1, :, 1] = 0.5 * (vert_cloud[-2:-17:-1, :, 1] + vert_tail_pts[1:-1, :, 1])
 
         # Reduce for testing. (See John Jasa's recommendations in the docs.)
         if self.options['reduced']:
-            wing_pts = wing_pts[::2, ::4, :]
-            horiz_tail_pts = horiz_tail_pts[::2, :, :]
-            vert_tail_pts = vert_tail_pts[::2, :, :]
+            wing_pts = wing_pts[:, ::4, :]
+            wing_pts = wing_pts[[0, 4, 8, 12, 16, 22], ...]
+            horiz_tail_pts = horiz_tail_pts[::4, ::2, :]
+            vert_tail_pts = vert_tail_pts[::4, ::2, :]
 
         # Flip around so that FEM normals yield positive areas.
         wing_pts = wing_pts[::-1, ::-1, :]
