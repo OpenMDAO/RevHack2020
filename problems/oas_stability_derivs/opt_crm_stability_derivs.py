@@ -228,6 +228,7 @@ model.add_design_var('ecrm_150.alpha', lower=0.0, upper=12.0)
 
 prob.driver = om.pyOptSparseDriver()
 prob.driver.options['optimizer'] = "SNOPT"
+prob.driver.options['debug_print'] = ['desvars', 'nl_cons', 'objs']
 prob.driver.opt_settings['Major feasibility tolerance'] = 1e-5
 
 prob.setup()
@@ -258,4 +259,5 @@ prob.set_val('ecrm_150.alpha', 1.5)
 
 prob.run_driver()
 
+prob.list_problem_vars()
 print('done')
