@@ -71,7 +71,7 @@ class ECRM(om.ExplicitComponent):
         self.add_output('CL_alpha', 0.0)
         self.add_output('CN_beta', 0.0)
 
-        self.add_output('C_weight', 0.0)
+        self.add_output('L_equals_W', 0.0)
         self.add_output('S', 0.0)
 
     def setup_partials(self):
@@ -104,7 +104,7 @@ class ECRM(om.ExplicitComponent):
             indep_var_comp.add_output('W0', val=0.4 * 3e5,  units='kg')
             indep_var_comp.add_output('speed_of_sound', val=295.4, units='m/s')
             indep_var_comp.add_output('load_factor', val=1.)
-            indep_var_comp.add_output('empty_cg', val=np.array([262.614, 0.0, 115.861]), units='m')
+            indep_var_comp.add_output('empty_cg', val=np.array([262.614, 0.0, 115.861]), units='inch')
 
             prob.model.add_subsystem('prob_vars', indep_var_comp, promotes=['*'])
 
@@ -138,6 +138,9 @@ class ECRM(om.ExplicitComponent):
 
                 prob.model.connect(f'geo.{name}:t_over_c', f'aero.{name}_perf.t_over_c')
 
+                # Finite Difference is faster.
+                #prob.model.approx_totals(method='fd')
+
             prob.setup()
             self._problem = prob
 
@@ -165,17 +168,15 @@ class ECRM(om.ExplicitComponent):
         # Extract Outputs
         outputs['CL'] = prob.get_val('aero.CL')
         outputs['CD'] = prob.get_val('aero.CD')
-
-        rho = inputs['rho']
-        v = inputs['v']
-        S = prob.get_val('aero.total_perf.S_ref_total')
-        W = prob.get_val('aero.L_equals_W')
-        outputs['C_weight'] = W / (0.5 * rho * v**2 * S)
+        outputs['L_equals_W'] = prob.get_val('aero.L_equals_W')
 
         # Compute Stability Derivatives
         of = ['aero.CL', 'aero.CD', 'aero.CM']
         wrt = ['alpha', 'beta']
+        from time import time
+        t0 = time()
         totals = prob.compute_totals(of=of, wrt=wrt)
+        print('OAS stability deriv time:', time() - t0)
 
         # Extract Stability Derivatives
         outputs['CM_alpha'] = totals['aero.CM', 'alpha'][1, 0]
@@ -185,6 +186,7 @@ class ECRM(om.ExplicitComponent):
 
 if __name__ == "__main__":
     import pickle
+    from time import time
 
     #Read baseline mesh
     with open('baseline_meshes_reduced.pkl', "rb") as f:
@@ -339,13 +341,22 @@ if __name__ == "__main__":
                                      vert_tail_surface=vert_tail_surface),
                         promotes=['*'])
 
+    t0 = time()
     prob.setup()
+    t1 = time() - t0
+
+    prob.set_val('v', 150.0, units='mi/h')
+    prob.set_val('Mach_number', 150.0/767)
 
     prob.run_model()
+    t2 = time() - t0 - t1
 
     print('stability derivs')
     print('CM_alpha', prob.get_val('CM_alpha'))
     print('CL_alpha', prob.get_val('CL_alpha'))
     print('CN_beta', prob.get_val('CN_beta'))
+    print('')
+    print('Setup time:', t1)
+    print('Run time:', t2)
 
     print('done')

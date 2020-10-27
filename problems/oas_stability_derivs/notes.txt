@@ -1,0 +1,61 @@
+Quarter-sized problem
+---------------------
+analytic derivs:86.3 sec
+fd: 3.6 sec
+linear problem: A.shape (904929, 904929)
+wing: 12x9
+tails: 9x9
+
+config_summary(prob)
+============== Problem Summary ============
+Groups:              36
+Components:         116
+Max tree depth:       5
+
+Design variables:            0   Total size:        0
+
+Nonlinear Constraints:       0   Total size:        0
+    equality:                0                      0
+    inequality:              0                      0
+
+Linear Constraints:          0   Total size:        0
+    equality:                0                      0
+    inequality:              0                      0
+
+Objectives:                  0   Total size:        0
+
+Input variables:           330   Total size:   929077
+Output variables:          189   Total size:   920033
+
+Total connections: 330   Total transfer data size: 929077
+
+Driver type: Driver
+Linear Solvers: [LinearRunOnce x 35, DirectSolver]
+Nonlinear Solvers: [NonlinearRunOnce x 35, NonlinearBlockGS]
+
+
+htail: 5x5 mesh = 10499 data size
+vtail: 5x5 mesh = 8459 data size
+12x9 mesh = 175025 data size
+alltogether: 319765 data size
+
+
+Final-sized problem
+---------------------
+wing: 6 x 9
+tails: 5 x 5
+analytic derivs:7.45 sec
+fd: 2.93 sec
+linear problem: data size: 128305
+wing: 6x9
+tails: 5x9
+
+
+Major source of the vector size:
+
+get_vectors_force + mtx_assy_forces + eval_velocities  (GetMatrix + EvalVelMtx + EvalVelocities)
+force_pts + mesh --> force_pts_velocities.
+- Don't need intermediate calcs for anything else.
+- They are huge (216 x 12 x 17 x 3)
+
+Baring that, should the surfaces be solved by independent VL calculations instead of all together
