@@ -108,8 +108,7 @@ git clone --depth=1 https://github.com/OpenVSP/OpenVSP.git repo
  In your Python environment, run `pip install 'openmdao[all]'`
 
 ### Sample Code
-OpenMDAO component wrapper for a VSP model of a modified CRM (eCRM-001) that will be used to demonstrate the
-computation and use of stability derivatives in a design problem.
+OpenMDAO component wrapper for a VSP model of a modified CRM (eCRM-001) that will be used to demonstrate the computation and use of stability derivatives in a design problem. This code is based on a sample provided used during [OpenMDAO RevHack 2020](https://github.com/OpenMDAO/RevHack2020).
 
 Required modules:
 ```
@@ -206,8 +205,7 @@ Compute the degenerate geometry representation for the OpenVSP components, and o
         vert_tail_pts = self.vsp_to_point_cloud(degen_obj)
 ```
 
-Change the shape of the point cloud, using Fortran-like index order. Since the symmetry points
-are duplicated, slice the array in half.
+Change the shape of the point cloud for use with OpenAeroStuct, using Fortran-like index order. Since the symmetry points are duplicated, slice the array in half.
 ```
         # OAS expects x stripes.
         wing_pts = wing_pts.reshape((45, 33, 3), order='F')
@@ -268,7 +266,10 @@ if __name__ == "__main__":
     p.setup()
 
     p.run_model()
+```
 
+Serialize and save the data for later use.
+```
     data = {}
     for item in ['wing_mesh', 'vert_tail_mesh', 'horiz_tail_mesh']:
         data[item] = p.get_val(f"vsp_comp.{item}", units='m')
