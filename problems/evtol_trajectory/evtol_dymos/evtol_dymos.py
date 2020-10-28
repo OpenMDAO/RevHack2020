@@ -5,6 +5,7 @@ import numpy as np
 import sys
 sys.path.insert(0, "../ode")
 
+from evtol_dynamics_comp_vectorized import Dynamics as DynamicsVectorized
 from evtol_dynamics_comp import Dynamics
 
 
@@ -55,43 +56,43 @@ if __name__ == '__main__':
     traj = dm.Trajectory()
     p.model.add_subsystem('traj', traj)
 
-    phase = dm.Phase(transcription=dm.Radau(num_segments=5, order=3, solve_segments=True, compressed=False),
-                     ode_class=Dynamics,
+    phase = dm.Phase(transcription=dm.GaussLobatto(num_segments=25, order=3, solve_segments=False, compressed=False),
+                     ode_class=DynamicsVectorized,
                      ode_init_kwargs={'input_dict': input_dict})
 
     traj.add_phase('phase0', phase)
 
-    phase.set_time_options(fix_initial=True, duration_bounds=(5, 60), duration_scaler=3e-2)
-    phase.add_state('x', fix_initial=True, rate_source='x_dot', ref=900, defect_ref=100)
-    phase.add_state('y', fix_initial=True, rate_source='y_dot')
-    phase.add_state('vx', fix_initial=True, rate_source='vx_dot')
-    phase.add_state('vy', fix_initial=True, rate_source='vy_dot')
+    phase.set_time_options(fix_initial=True, duration_bounds=(5, 60), duration_ref=30)
+    phase.add_state('x', fix_initial=True, rate_source='x_dot', ref0=0, ref=900, defect_ref=100)
+    phase.add_state('y', fix_initial=True, rate_source='y_dot', ref0=0, ref=300, defect_ref=300)
+    phase.add_state('vx', fix_initial=True, rate_source='vx_dot', ref0=0, ref=10)
+    phase.add_state('vy', fix_initial=True, rate_source='vy_dot', ref0=0, ref=10)
     phase.add_state('energy', fix_initial=True, rate_source='energy_dot', ref=1E7, defect_ref=1E5)
 
-    phase.add_control('power', lower = 1e3, upper =311000, scaler=5e-6)
-    phase.add_control('theta', lower = 0., upper =3*np.pi/4, scaler=1.2)
+    phase.add_control('power', lower=1e3, upper=311000, ref0=1e3, ref=311000, rate_continuity=False)
+    phase.add_control('theta', lower=0., upper=3*np.pi/4, ref0=0, ref=3*np.pi/4, rate_continuity=False)
 
     # Objective
-    phase.add_objective('energy', loc='final', ref=1E6)
+    phase.add_objective('energy', loc='final', ref=1E7)
 
     # Boundary Constraints
-    phase.add_boundary_constraint('y', loc='final', lower=305, scaler=3e-3)  # Constraint for the final vertical displacement
-    phase.add_boundary_constraint('x', loc='final', equals=900, scaler=3e-3)  # Constraint for the final horizontal displacement
-    phase.add_boundary_constraint('x_dot', loc='final', equals=67., scaler=2e-2)  # Constraint for the final horizontal speed
+    phase.add_boundary_constraint('y', loc='final', lower=305, ref=100)  # Constraint for the final vertical displacement
+    phase.add_boundary_constraint('x', loc='final', equals=900, ref=100)  # Constraint for the final horizontal displacement
+    phase.add_boundary_constraint('x_dot', loc='final', equals=67., ref=100)  # Constraint for the final horizontal speed
     
     # Path Constraints
     phase.add_path_constraint('y', lower=0., upper=305, ref=300)  # Constraint for the minimum vertical displacement
-    phase.add_path_constraint('acc', upper=0.3, scaler=4.)  # Constraint for the acceleration magnitude
-    phase.add_path_constraint('aoa', lower=-15, upper=15, ref0=-10, ref=10)  # Constraint for the acceleration magnitude
-    phase.add_path_constraint('thrust', lower=10, ref=10)  # Constraint for the thrust magnitude
+    phase.add_path_constraint('acc', upper=0.3, ref=1.0)  # Constraint for the acceleration magnitude
+    phase.add_path_constraint('aoa', lower=-15, upper=15, ref0=-15, ref=15)  # Constraint for the acceleration magnitude
+    phase.add_path_constraint('thrust', lower=10, ref0=10, ref=100)  # Constraint for the thrust magnitude
 
     # Setup the driver
     p.driver = om.pyOptSparseDriver()
     p.driver.options['optimizer'] = "SNOPT"
-    p.driver.opt_settings['Major optimality tolerance'] = 1e-7
-    p.driver.opt_settings['Major feasibility tolerance'] = 1e-7
+    p.driver.opt_settings['Major optimality tolerance'] = 1e-5
+    p.driver.opt_settings['Major feasibility tolerance'] = 1e-5
     p.driver.opt_settings['Major iterations limit'] = 1000
-    p.driver.opt_settings['Minor iterations limit'] = 100000
+    p.driver.opt_settings['Minor iterations limit'] = 100_000_000
     # p.driver.opt_settings['Verify level'] = 3
     p.driver.opt_settings['iSumm'] = 6
 
@@ -109,9 +110,9 @@ if __name__ == '__main__':
     p.set_val('traj.phase0.t_duration', 30.0)
     p.set_val('traj.phase0.states:x', phase.interpolate(ys=[0, 900], nodes='state_input'))
     p.set_val('traj.phase0.states:y',  phase.interpolate(ys=[0, 300], nodes='state_input'))
-    p.set_val('traj.phase0.states:vx', phase.interpolate(ys=[0, 20], nodes='state_input'))
-    p.set_val('traj.phase0.states:vy', phase.interpolate(ys=[0.01, 0.01], nodes='state_input'))
-    p.set_val('traj.phase0.states:energy', phase.interpolate(ys=[0, 1E6], nodes='state_input'))
+    p.set_val('traj.phase0.states:vx', phase.interpolate(ys=[0, 60], nodes='state_input'))
+    p.set_val('traj.phase0.states:vy', phase.interpolate(ys=[10, 10], nodes='state_input'))
+    p.set_val('traj.phase0.states:energy', phase.interpolate(ys=[0, 1E7], nodes='state_input'))
     p.set_val('traj.phase0.controls:power', 200000.0)
     p.set_val('traj.phase0.controls:theta', phase.interpolate(ys=[0.05, np.radians(80)], nodes='control_input'))
 

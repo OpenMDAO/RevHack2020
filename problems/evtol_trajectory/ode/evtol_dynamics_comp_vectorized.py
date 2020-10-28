@@ -1,26 +1,35 @@
-# --------------------------------------------------------------------------------------------------
-# This contains the functions and OpenMDAO component class for the simplified eVTOL flight physics.
-# This works at least with OpenMDAO version 2.6.0.
-# SI units used for everthing unless otherwise specified.
-# Author: Shamsheer Chauhan
-# --------------------------------------------------------------------------------------------------
-
-from __future__ import division, print_function
 import numpy as np
-from openmdao.api import ExplicitComponent
+import openmdao.api as om
+import dymos as dm
+
+from openmdao.utils.cs_safe import abs as cs_abs
 
 
-def c_atan2(x, y):
-    """ This is an arctan2 function that works with the complex-step method."""
-    a = x.real
-    b = x.imag
-    c = y.real
-    d = y.imag
+def cs_atan2(y, x):
+    """
+    A numpy-compatible, complex-compatible arctan2 function for use with complex-step.
 
-    if np.iscomplex(x) or np.iscomplex(y):
-        return complex(np.arctan2(a, c), (c * b - a * d) / (a ** 2 + c ** 2))
+    Parameters
+    ----------
+    y : float or complex
+        The length of the side opposite the angle being determined.
+    x : float or complex
+        The length of the side adjacent to the angle being determined.
+
+    Returns
+    -------
+    The angle whose opposite side has length y and whose adjacent side has length x.
+    """
+    a = np.real(y)
+    b = np.imag(y)
+    c = np.real(x)
+    d = np.imag(x)
+
+    if np.any(np.iscomplex(x)) or np.any(np.iscomplex(y)):
+        res = np.arctan2(a, c) + 1j * (c * b - a * d) / (a**2 + c**2)
     else:
-        return np.arctan2(a, c)
+        res = np.arctan2(a, c)
+    return res
 
 
 def give_curve_fit_coeffs(a0, AR, e):
@@ -101,7 +110,7 @@ def Thrust(u0, power, A, T, rho, kappa):
     rho : float
         Air density
     kappa: float
-        Corection factor for non-uniform inflow and tip effects
+        Correction factor for non-uniform inflow and tip effects
 
     Returns
     -------
@@ -115,28 +124,28 @@ def Thrust(u0, power, A, T, rho, kappa):
     thrust = T
 
     # iteration loop to solve for the thrust as a function of power
-    while np.abs(T_old.real - thrust.real) > 1e-10:
+    while np.any(np.abs(T_old - thrust) > 1e-10):
         T_old = thrust
 
-        ### FPI (Fixed point iteration)
+        # ### FPI (Fixed point iteration)
         # T_new = power / (u0 + kappa * (-u0/2 + 0.5 * (u0**2 + 2 * thrust / rho / A)**0.5))
         # thrust = thrust + (T_new - thrust) * 0.5
 
-        # Newton-Raphson
-        root_term = (u0 ** 2 + 2 * thrust / rho / A) ** 0.5
-        R = power - thrust * (u0 + kappa * (-u0 / 2 + 0.5 * root_term))
-        R_prime = -u0 - kappa * (-u0 / 2 + 0.5 * root_term + 0.5 * thrust / rho / A / root_term)
-        thrust = T_old - R / R_prime
+        # # Newton-Raphson
+        with np.errstate(all='raise'):
+            try:
+                root_term = (u0**2 + 2 * thrust / rho / A)**0.5
+                R = power - thrust * (u0 + kappa * (-u0 / 2 + 0.5 * root_term))
+                R_prime = -u0 - kappa * ( -u0 / 2 + 0.5 * root_term + 0.5 * thrust / rho / A / root_term)
+                thrust = T_old - R / R_prime
+            except:
+                raise om.AnalysisError('invalid calc in thrust')
+
 
     # the induced velocity (i.e., velocity added at the disk) is
-    v_i = (-u0 / 2 + (u0 ** 2 / 4. + thrust / 2 / rho / A) ** 0.5)
-
-    if u0.real < 0:
-        # This model is not valid if the freestream speed is negative
-        print("FREESTREAM SPEED IS NEGATIVE!", thrust, v_i)
+    v_i = (-u0 / 2 + (u0**2 / 4. + thrust / 2 / rho / A)**0.5)
 
     return thrust, v_i
-
 
 def Normal_force(u0, radius, thrust, alpha, rho, nB, bc):
     """
@@ -177,18 +186,16 @@ def Normal_force(u0, radius, thrust, alpha, rho, nB, bc):
     rho = rho * 0.00194
     c = bc * m2f
 
-    q = 0.5 * rho * u0 ** 2
-    A_d = np.pi * Diam ** 2 / 4.
+    q = 0.5 * rho * u0**2
+    A_d = np.pi * Diam**2 / 4.
     Tc = thrust / q / A_d
-    f = 1 + 0.5 * ((1 + Tc) ** .5 - 1) + Tc / 4. / (2 + Tc)
+    f = 1 + 0.5 * ((1 + Tc)**.5 - 1) + Tc / 4. / (2 + Tc)
     sigma = 4 * nB / 3 / np.pi * c / Diam
-    slope = 4.25 * sigma / (1 + 2 * sigma) * np.sin(
-        beta / 180. * np.pi + 8. / 180. * np.pi) * f * q * A_d
+    slope = 4.25 * sigma / (1 + 2 * sigma) * np.sin(beta/180.*np.pi + 8./180.*np.pi) * f * q * A_d
 
     normal_force = slope * np.tan(alpha) / 2.2046 * 9.81
 
     return normal_force
-
 
 def CLfunc(angle, alpha_stall, AR, e, a0, t_over_c):
     """
@@ -214,57 +221,37 @@ def CLfunc(angle, alpha_stall, AR, e, a0, t_over_c):
     CL : float
         Lift coefficient of the wing
     """
+    pos_idxs = np.where(angle >= 0)[0]
+    neg_idxs = np.where(angle < 0)[0]
+    CL = np.zeros_like(angle)
 
-    if angle.real >= 0:
+    CLa = a0 / (1 + a0 / (np.pi * e * AR))
+    CL_stall = CLa * alpha_stall
 
-        CLa = a0 / (1 + a0 / (np.pi * e * AR))
-        CL_stall = CLa * alpha_stall
+    # CD_max = (1. + 0.065 * AR) / (0.9 + t_over_c)
+    CD_max = 1.1 + 0.018 * AR
 
-        # CD_max = (1. + 0.065 * AR) / (0.9 + t_over_c)
-        CD_max = 1.1 + 0.018 * AR
+    CL1 = CLa * angle
 
-        CL1 = CLa * angle
+    A1 = CD_max / 2
+    A2 = (CL_stall - CD_max * np.sin(alpha_stall) * np.cos(alpha_stall)) * np.sin(alpha_stall) / np.cos(alpha_stall)**2
+    CL2 = A1 * np.sin(2 * angle) + A2 * np.cos(angle)**2 / np.sin(angle)
 
-        A1 = CD_max / 2
-        A2 = (CL_stall - CD_max * np.sin(alpha_stall) * np.cos(alpha_stall)) * np.sin(
-            alpha_stall) / np.cos(alpha_stall) ** 2
-        CL2 = A1 * np.sin(2 * angle) + A2 * np.cos(angle) ** 2 / np.sin(angle)
+    CL_array = np.vstack((-CL1, -CL2)).T
+    CL_array_neg = np.vstack((CL1, CL2)).T
 
-        CL_array = np.array([-CL1, -CL2])
-        ks_rho = 50.  # Hard coded, see Martins and Poon 2005 for more
-        fmax = np.max(CL_array)
-        CL = -(fmax + 1 / ks_rho * np.log(np.sum(np.exp(ks_rho * (CL_array - fmax)))))
+    ks_rho = 50. # Hard coded, see Martins and Poon 2005 for more
 
-        # this is because something strange happens very near 0 for complex step
-        if angle.real < 1e-8:
-            CL = CLa * angle
+    # Get the max at each node
+    fmax = np.max(CL_array, axis=1)
+    fmax_neg = np.max(CL_array_neg, axis=1)
 
-    else:
-
-        CLa = a0 / (1 + a0 / (np.pi * e * AR))
-        CL_stall = CLa * alpha_stall
-
-        # CD_max = (1. + 0.065 * AR) / (0.9 + t_over_c)
-        CD_max = 1.1 + 0.018 * AR
-
-        CL1 = CLa * angle
-
-        A1 = CD_max / 2
-        A2 = (CL_stall - CD_max * np.sin(alpha_stall) * np.cos(alpha_stall)) * np.sin(
-            alpha_stall) / np.cos(alpha_stall) ** 2
-        CL2 = A1 * np.sin(2 * angle) + A2 * np.cos(angle) ** 2 / np.sin(angle)
-
-        CL_array = np.array([CL1, CL2])
-        ks_rho = 50.  # Hard coded, see Martins and Poon 2005 for more
-        fmax = np.max(CL_array)
-        CL = (fmax + 1 / ks_rho * np.log(np.sum(np.exp(ks_rho * (CL_array - fmax)))))
-
-        # this is because something strange happens very near 0 for complex step
-        if angle.real > -1e-8:
-            CL = CLa * angle
-
+    with np.printoptions(linewidth=1024):
+        if np.any(angle >= 0):
+            CL[pos_idxs] = -(fmax[pos_idxs, np.newaxis] + 1 / ks_rho * np.log(np.sum(np.exp(ks_rho * (CL_array[pos_idxs, :] - fmax[pos_idxs, np.newaxis]))))).ravel()
+        if np.any(angle < 0):
+            CL[neg_idxs] = (fmax_neg[neg_idxs, np.newaxis] + 1 / ks_rho * np.log(np.sum(np.exp(ks_rho * (CL_array_neg[neg_idxs] - fmax_neg[neg_idxs, np.newaxis]))))).ravel()
     return CL
-
 
 def CDfunc(angle, AR, e, alpha_stall, coeffs, a0, t_over_c):
     """
@@ -295,122 +282,54 @@ def CDfunc(angle, AR, e, alpha_stall, coeffs, a0, t_over_c):
 
     quartic_poly_coeffs = coeffs
 
-    cla = a0 / (1 + a0 / (np.pi * e * AR))
+    cla =  a0 / (1 + a0 / (np.pi * e * AR))
     cl_stall = cla * alpha_stall
-    CD_stall = np.dot(quartic_poly_coeffs, np.array([1, alpha_stall ** 2, alpha_stall ** 4]))
+    CD_stall = np.dot(quartic_poly_coeffs, np.array([1, alpha_stall**2, alpha_stall**4]))
 
     CD_max = (1. + 0.065 * AR) / (0.9 + t_over_c)
 
     B1 = CD_max
     B2 = (CD_stall - CD_max * np.sin(alpha_stall)) / np.cos(alpha_stall)
 
-    if angle.real < 0:
-        angle = -angle
+    ks_rho = 50. # Hard coded, see Martins and Poon 2005 for more
+
+    abs_angle = cs_abs(angle)
 
     # this is for the first part (quartic fit)
-    CD_pt1 = np.dot(quartic_poly_coeffs,
-                    np.array([1, (27.5 / 180. * np.pi) ** 2, (27.5 / 180. * np.pi) ** 4]))
-    CD_pt2 = B1 * np.sin(28. / 180. * np.pi) + B2 * np.cos(28. / 180. * np.pi)
+    CD_pt1 = np.dot(quartic_poly_coeffs, np.array([1, (27.5/180.*np.pi)**2, (27.5/180.*np.pi)**4])) * np.ones_like(abs_angle)
+    CD_pt2 = B1 * np.sin(28./180.*np.pi) + B2 * np.cos(28./180.*np.pi) * np.ones_like(abs_angle)
 
-    adjustment_line = (CD_pt2 - CD_pt1) / (0.5 / 180. * np.pi) * (
-                angle - 28. / 180. * np.pi) + CD_pt2
+    adjustment_line = (CD_pt2 - CD_pt1) / (0.5/180.*np.pi) * (abs_angle - 28./180.*np.pi) + CD_pt2
 
-    CD1 = np.dot(quartic_poly_coeffs, np.array([1, angle ** 2, angle ** 4]))
+    CD1 = np.dot(quartic_poly_coeffs, np.array([1, abs_angle**2, abs_angle**4]))
 
-    CD_array = np.array([CD1, adjustment_line])
-    ks_rho = 50.  # Hard coded, see Martins and Poon 2005 for more
-    fmax = np.max(CD_array)
-    CD2 = (fmax + 1 / ks_rho * np.log(np.sum(np.exp(ks_rho * (CD_array - fmax)))))
+    CD_array = np.vstack([CD1, adjustment_line]).T
+    fmax = np.max(CD_array, axis=1)
+    CD2 = (fmax + 1 / ks_rho * np.log(np.sum(np.exp(ks_rho * (CD_array - fmax[:, np.newaxis])))))
 
     # this is for the second part (Tangler--Ostowari)
-    CD3 = B1 * np.sin(angle) + B2 * np.cos(angle)
+    CD3 = B1 * np.sin(abs_angle) + B2 * np.cos(abs_angle)
 
-    CD_array = np.array([CD3, CD_pt1])
-    ks_rho = 50.  # Hard coded, see Martins and Poon 2005 for more
-    fmax = np.max(CD_array)
-    CD4 = (fmax + 1 / ks_rho * np.log(np.sum(np.exp(ks_rho * (CD_array - fmax)))))
+    CD_array = np.vstack([CD3, CD_pt1]).T
+    fmax = np.max(CD_array, axis=1)
+    CD4 = (fmax + 1 / ks_rho * np.log(np.sum(np.exp(ks_rho * (CD_array - fmax[:, np.newaxis])))))
 
     # this puts them together
-    CD_array = np.array([-CD2, -CD4])
-    ks_rho = 50.  # Hard coded, see Martins and Poon 2005 for more
-    fmax = np.max(CD_array)
-    CD4 = -(fmax + 1 / ks_rho * np.log(np.sum(np.exp(ks_rho * (CD_array - fmax)))))
+    CD_array = np.vstack([-CD2, -CD4]).T
+    fmax = np.max(CD_array, axis=1)
+    CD4 = -(fmax + 1 / ks_rho * np.log(np.sum(np.exp(ks_rho * (CD_array - fmax[:, np.newaxis])))))
 
     return CD4
 
 
-def change(atov, v_inf, theta, T, alpha_stall, CD0, AR, e, rho, S, m, a0, t_over_c, coeffs, v_i,
-           v_factor, Normal_F):
-    """
-    This computes the change in velocity for each time step.
-
-    Parameters
-    ----------
-    atov : float
-        Freestream angle to the vertical
-    v_inf : float
-        Freestream speed
-    dt : float
-        Time step size
-    theta : float
-        Wing angle to the vertical
-    T : float
-        Thrust
-    alpha_stall : float
-        Stall angle of attack
-    CD0 : float
-        Parasite drag coefficient for fuse, gear, etc.
-    AR : float
-        Aspect ratio
-    e : float
-        Span efficiency factor
-    rho : float
-        Air density
-    S : float
-        Wing planform area
-    m : float
-        Mass of the aircraft
-    a0 : float
-        Airfoil lift-curve slope
-    t_over_c : float
-        Thickness-to-chord ratio
-    coeffs : array
-        Curve-fit polynomial coefficients for the drag coefficient below 27.5 deg
-    v_i : float
-        Induced-velocity value from the propellers
-    v_factor : float
-        Induced-velocity factor
-    Normal_F : float
-        Total propeller forces normal to the propeller axes
-
-    Returns
-    -------
-    delta_xdot : float
-        Change in horizontal velocity
-    delta_ydot : float
-        Change in vertical velocity
-    CL : float
-        Wing lift coefficient
-    CD : float
-        Wing drag coefficient
-    aoa_blown : float
-        Effective angle of attack with prop wash
-    L : float
-        Total lift force of the wings
-    D_wings : float
-        Total drag force of the wings
-    D_fuse : float
-        Drag force of the fuselage
-    """
-
-    # use angle of attack of wing to estimate CL and CD
+def aero(atov, v_inf, theta, T, alpha_stall, CD0, AR, e, rho, S, m, a0, t_over_c, coeffs, v_i, v_factor, Normal_F):
     aoa = atov - theta
     v_chorwise = v_inf * np.cos(aoa)
     v_normal = v_inf * np.sin(aoa)
 
     v_chorwise += v_i * v_factor
     v_blown = (v_chorwise ** 2 + v_normal ** 2) ** 0.5
-    aoa_blown = c_atan2(v_normal, v_chorwise)
+    aoa_blown = cs_atan2(v_normal, v_chorwise)
 
     CL = CLfunc(aoa_blown, alpha_stall, AR, e, a0, t_over_c)
     CD = CDfunc(aoa_blown, AR, e, alpha_stall, coeffs, a0, t_over_c)
@@ -420,17 +339,10 @@ def change(atov, v_inf, theta, T, alpha_stall, CD0, AR, e, rho, S, m, a0, t_over
     D_wings = 0.5 * rho * v_blown ** 2 * CD * S
     D_fuse = 0.5 * rho * v_inf ** 2 * CD0 * S
 
-    # compute horizontal and vertical changes in velocity
-    delta_xdot = (T * np.sin(theta) - D_fuse * np.sin(atov) - D_wings * np.sin(
-        theta + aoa_blown) - L * np.cos(theta + aoa_blown) - Normal_F * np.cos(theta)) / m
-    delta_ydot = (T * np.cos(theta) - D_fuse * np.cos(atov) - D_wings * np.cos(
-        theta + aoa_blown) + L * np.sin(theta + aoa_blown) + Normal_F * np.sin(
-        theta) - m * 9.81) / m
-
-    return np.array([delta_xdot, delta_ydot, CL, CD, aoa_blown, L, D_wings, D_fuse])
+    return CL, CD, aoa_blown, L, D_wings, D_fuse, aoa_blown
 
 
-class Dynamics(ExplicitComponent):
+class Dynamics(om.ExplicitComponent):
     """
     This is the OpenMDAO component that takes the design variables and computes
     the objective function and other quantities of interest.
@@ -471,16 +383,12 @@ class Dynamics(ExplicitComponent):
     def initialize(self):
         # declare the input dict provided in the run script
         self.options.declare('input_dict', types=dict)
-        self.options.declare('num_nodes', types=int)
+        self.options.declare('num_nodes', types=(int,), default=1)
 
     def setup(self):
         input_dict = self.options['input_dict']
-        num_nodes = self.options['num_nodes']
 
-        # give variable names to user-specified values from input dict
-        self.x_dot_initial = input_dict['x_dot_initial']  # initial horizontal speed
-        self.y_dot_initial = input_dict['y_dot_initial']  # initial vertical speed
-        self.y_initial = input_dict['y_initial']  # initial vertical displacement
+        # # give variable names to user-specified values from input dict
         self.A_disk = input_dict['A_disk']  # total propeller disk area
         self.T_guess = input_dict['T_guess']  # initial thrust guess
         self.alpha_stall = input_dict['alpha_stall']  # wing stall angle
@@ -495,7 +403,7 @@ class Dynamics(ExplicitComponent):
         self.v_factor = input_dict['induced_velocity_factor']  # induced-velocity factor
         self.stall_option = input_dict[
             'stall_option']  # stall option: 's' allows stall, 'ns' does not
-        self.num_steps = input_dict['num_steps']  # number of time steps
+        # self.num_steps = input_dict['num_steps']  # number of time steps
         self.R = input_dict['R']  # propeller radius
         self.solidity = input_dict['solidity']  # propeller solidity
         self.omega = input_dict['omega']  # propeller angular speed
@@ -509,10 +417,13 @@ class Dynamics(ExplicitComponent):
         self.quartic_poly_coeffs, pts = give_curve_fit_coeffs(self.a0, self.AR, self.e)
 
         # openmdao inputs to the component
-        self.add_input('power', val=np.ones(num_nodes))  # control
-        self.add_input('theta', val=np.ones(num_nodes))  # control
+        nn = self.options['num_nodes']
+        self.add_input('power', val=np.ones(nn))
+        self.add_input('theta', val=np.ones(nn))
+        self.add_input('vx', val=np.ones(nn))
+        self.add_input('vy', val=np.ones(nn))
+        # self.add_input('flight_time', val=15. * 60)
         # openmdao outputs from the component
-<<<<<<< HEAD
         self.add_output('x_dot', val=np.ones(nn))
         self.add_output('y_dot', val=np.ones(nn))
         self.add_output('vx_dot', val=np.ones(nn))
@@ -557,49 +468,15 @@ class Dynamics(ExplicitComponent):
         # self.D_fuse = np.zeros(self.num_steps, dtype=complex)  # drag of the fuselage
         # self.N = np.zeros(self.num_steps, dtype=complex)  # total propeller normal force
         # self.aoa_prop = np.zeros(self.num_steps, dtype=complex)  # propeller angle of attack
-=======
->>>>>>> c28c09917da28d381b2a7ebf194b0e4b73b046ce
-
-        # state history inputs that some calcs need
-        self.add_input('vx', val=np.ones(num_nodes))
-        self.add_input('vy', val=np.ones(num_nodes))
-
-        self.add_output('x_dot', val=np.ones(num_nodes))  # state rates for x
-        self.add_output('y_dot', val=np.ones(num_nodes))  # state rates for y
-
-        self.add_output('a_x', val=np.ones(num_nodes))  # state rates for v_x
-        self.add_output('a_y', val=np.ones(num_nodes))  # state rates for v_y
-
-        self.add_output('energy_dot', val=np.ones(num_nodes))  # state rates for energy
-
-        # additional intermediate variables we want to track
-        self.add_output('acc', val=np.ones(num_nodes))
-        self.add_output('atov', val=np.ones(num_nodes))
-        self.add_output('CL', val=np.ones(num_nodes))
-        self.add_output('CD', val=np.ones(num_nodes))
-        self.add_output('L_wings', val=np.ones(num_nodes))
-        self.add_output('D_wings', val=np.ones(num_nodes))
-        self.add_output('D_fuse', val=np.ones(num_nodes))
-        self.add_output('aoa', val=np.ones(num_nodes))
-        self.add_output('aoa_prop', val=np.ones(num_nodes))
-        self.add_output('v_i', val=np.ones(num_nodes))
-        self.add_output('N', val=np.ones(num_nodes))
-        self.add_output('thrust', val=np.ones(num_nodes))
-        self.add_output('u_inf_prop', val=np.ones(num_nodes))
-
-        # some internal variables variables
-        # self.thrusts = np.ones(num_nodes, dtype=complex) # thrusts
-        # self.atov = np.ones(num_nodes, dtype=complex) # freestream angles to vertical
-        # self.CL = np.zeros(num_nodes, dtype=complex) # wing lift coefficients
-        # self.CD = np.zeros(num_nodes, dtype=complex) # wing drag coefficients
-
-        # self.aoa = np.zeros(num_nodes, dtype=complex) # effective wing angles of attack
 
         # use complex step for partial derivatives
-        self.declare_partials('*', '*', method='cs')
+        self.declare_partials('*', '*', method='fd')
+
+        # Partial derivative coloring
+        # self.declare_coloring(wrt=['*'], method='cs', tol=1.0E-12, num_full_jacs=5,
+        #                       show_summary=True, show_sparsity=True, min_improve_pct=10.)
 
     def compute(self, inputs, outputs):
-<<<<<<< HEAD
 
         # self.x_dots[0] = self.x_dot_initial
         # self.y_dots[0] = self.y_dot_initial
@@ -744,87 +621,3 @@ if __name__ == '__main__':
     plt.plot(exp_out.get_val('traj.phase0.timeseries.states:x'),
              exp_out.get_val('traj.phase0.timeseries.states:y'))
     plt.show()
-=======
-        thrust = self.T_guess
-
-        # time integration
-        for i in range(self.options['num_nodes']):
-            power = inputs['power'][i]
-            theta = inputs['theta'][i]
-            x_dot = inputs['vx'][i]
-            y_dot = inputs['vy'][i]
-
-            # the freestream angle relative to the vertical is
-            atov = c_atan2(x_dot, y_dot)
-            # the freestream speed is
-            v_inf = (x_dot ** 2 + y_dot ** 2) ** 0.5
-
-            outputs['u_inf_prop'][i] = u_inf_prop = v_inf * np.cos(atov - theta)
-            u_parallel = v_inf * np.sin(atov - theta)
-
-            mu = u_parallel / (self.omega * self.R)
-            CP_profile = self.solidity * self.prop_CD0 / 8. * (1 + 4.6 * mu ** 2)
-            P_disk = self.k_elec * power - CP_profile * (
-                        self.rho * self.A_disk * (self.omega * self.R) ** 3)
-
-            thrust, vi = Thrust(u_inf_prop, P_disk, self.A_disk, thrust, self.rho, self.k_ind)
-            outputs['thrust'][i] = thrust
-
-            Normal_F = Normal_force(v_inf, self.R, thrust / self.n_props, atov - theta, self.rho,
-                                    self.nB, self.bc)
-
-            # step = change(atov, v_inf, dt, theta, thrust, self.alpha_stall, self.CD0, self.AR, self.e, self.rho, self.S, self.m, self.a0, self.t_over_c, self.quartic_poly_coeffs, vi, self.v_factor, self.n_props * Normal_F)
-            step = change(atov, v_inf, theta, thrust, self.alpha_stall, self.CD0, self.AR, self.e,
-                          self.rho, self.S, self.m, self.a0, self.t_over_c,
-                          self.quartic_poly_coeffs, vi, self.v_factor, self.n_props * Normal_F)
-
-            outputs['acc'][i] = ((step[0]) ** 2 + (step[1]) ** 2) ** 0.5 / 9.81
-            outputs['atov'][i] = atov
-            outputs['CL'][i] = step[2]
-            outputs['CD'][i] = step[3]
-
-            outputs['v_i'][i] = vi * self.v_factor
-            outputs['aoa'][i] = step[4]
-            outputs['L_wings'][i] = step[5]
-            outputs['D_wings'][i] = step[6]
-            outputs['D_fuse'][i] = step[7]
-            outputs['N'][i] = self.n_props * Normal_F
-            outputs['aoa_prop'][i] = atov - theta
-
-            outputs['x_dot'][i] = inputs['vx'][i]
-            outputs['y_dot'][i] = inputs['vy'][i]
-
-            outputs['a_x'][i] = step[0]
-            outputs['a_y'][i] = step[1]
-
-            outputs['energy_dot'][i] = power
-
-        # # use KS function for minimum vertical displacement
-        # ks_rho = 100. # Hard coded, see Martins and Poon 2005 for more (if using a larger number of time steps than ~500, this ks_rho value should be higher)
-        # f_max = np.max(-self.y)
-        # min_y = -(f_max + 1 / ks_rho * np.log(np.sum(np.exp(ks_rho * (-self.y - f_max)))))
-        # outputs['y_min'] = min_y
-
-        # # use KS function for minimum propeller inflow speed
-        # ks_rho = 100. # Hard coded, see Martins and Poon 2005 for more (if using a larger number of time steps than ~500, this ks_rho value should be higher)
-        # f_max = np.max(-self.u_inf_prop)
-        # self.min_u_prop = -(f_max + 1 / ks_rho * np.log(np.sum(np.exp(ks_rho * (-self.u_inf_prop - f_max)))))
-        # outputs['u_prop_min'] = self.min_u_prop
-
-        # # use KS function for minimum and maximum effective angles of attack
-        # if self.stall_option == 'ns':
-        #     ks_rho = 500. # Hard coded, see Martins and Poon 2005 for more
-        #     f_max = np.max(self.aoa)
-        #     max_aoa = (f_max + 1 / ks_rho * np.log(np.sum(np.exp(ks_rho * (self.aoa - f_max)))))
-        #     outputs['aoa_max'] = max_aoa
-
-        #     ks_rho = 500. # Hard coded, see Martins and Poon 2005 for more
-        #     f_max = np.max(-self.aoa)
-        #     min_aoa = -(f_max + 1 / ks_rho * np.log(np.sum(np.exp(ks_rho * (-self.aoa - f_max)))))
-        #     outputs['aoa_min'] = min_aoa
-
-        # ks_rho = 500. # Hard coded, see Martins and Poon 2005 for more
-        # f_max = np.max(self.acc)
-        # max_acc = (f_max + 1 / ks_rho * np.log(np.sum(np.exp(ks_rho * (self.acc - f_max)))))
-        # outputs['acc_max'] = max_acc
->>>>>>> c28c09917da28d381b2a7ebf194b0e4b73b046ce

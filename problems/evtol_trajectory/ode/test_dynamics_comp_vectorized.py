@@ -6,13 +6,12 @@ import openmdao.api as om
 from openmdao.utils.assert_utils import assert_near_equal
 
 from evtol_dynamics_comp import Dynamics
-from evtol_dynamics_comp_vectorized import Dynamics as DynamicsVectorized
 
 import verify_data
 
 class VerifyTest(unittest.TestCase): 
 
-    def make_problem(self, comp_class=Dynamics):
+    def test_verify(self): 
 
         # Input arguments are required when calling this script.
         # The first argument is the induced-velocity factor in percentage (e.g., 0, 50, 100).
@@ -66,45 +65,42 @@ class VerifyTest(unittest.TestCase):
                         }
 
         # ADD THE MAIN PHYSICS COMPONENT TO THE SYSTEM
-        prob.model.add_subsystem('dynamics', comp_class(input_dict=input_dict, num_nodes=num_steps), promotes=['*'])
+        prob.model.add_subsystem('dynamics', Dynamics(input_dict=input_dict, num_nodes=num_steps), promotes=['*'])
+
 
         prob.setup(check=True)
 
-        return prob
+        # prob['flight_time'] = verify_data.flight_time
 
-    def assert_results(self, prob):
-        prob['power'] = verify_data.powers
-        prob['theta'] = verify_data.thetas
+        prob['powers'] = verify_data.powers
+        prob['thetas'] = verify_data.thetas
 
-        prob['vx'] = verify_data.x_dot[:-1]
-        prob['vy'] = verify_data.y_dot[:-1]
+        prob['x_dot'] = verify_data.x_dot[:-1]
+        prob['y_dot'] = verify_data.y_dot[:-1]
 
         prob.run_model()
 
         tol = 1e-6
 
-        assert_near_equal(prob['x_dot'], verify_data.x_dot[:-1], tol)
-        assert_near_equal(prob['y_dot'], verify_data.y_dot[:-1], tol)
-
-        assert_near_equal(prob['a_x'], verify_data.a_x, tol)
-        assert_near_equal(prob['a_y'], verify_data.a_y, tol)
-
-        assert_near_equal(prob['thrust'], verify_data.thrusts[:-1], tol)
-        assert_near_equal(prob['atov'], verify_data.atov[1:], tol)
-
-        assert_near_equal(prob['CL'], verify_data.CL[1:], tol)
-        assert_near_equal(prob['CD'], verify_data.CD[1:], tol)
-
-        assert_near_equal(prob['L_wings'], verify_data.L_wings, tol)
-        assert_near_equal(prob['D_wings'], verify_data.D_wings, tol)
-
-    def test_dynamics(self):
-
-        prob = self.make_problem(comp_class=Dynamics)
-
-        self.assert_results(prob)
+        assert_near_equal(prob['x_dot'], verify_data.x_dot[:-1], 1e-6)
+        assert_near_equal(prob['y_dot'], verify_data.y_dot[:-1], 1e-6)
 
 
+        assert_near_equal(prob['a_x'], verify_data.a_x, 1e-6)
+        assert_near_equal(prob['a_y'], verify_data.a_y, 1e-6)
+        
+        assert_near_equal(prob['thrusts'], verify_data.thrusts[:-1], 1e-6)
+        assert_near_equal(prob['atov'], verify_data.atov[1:], 1e-6)
+    
+
+        assert_near_equal(prob['CL'], verify_data.CL[1:], 1e-6)
+        assert_near_equal(prob['CD'], verify_data.CD[1:], 1e-6)
+
+        assert_near_equal(prob['L_wings'], verify_data.L_wings, 1e-6)
+        assert_near_equal(prob['D_wings'], verify_data.D_wings, 1e-6)
+
+
+            
 
 
 if __name__ == "__main__": 
