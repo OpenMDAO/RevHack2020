@@ -18,20 +18,31 @@ def rk4_stepper(dt, t, x, f, u=None):
     return x_new
 
 
-def example_func(t, x):
-    return 0.5 * (t - x)
+def cannonball_ode(t, x):
+    ax = 0
+    ay = -9.8
+    vx = x[2]
+    vy = x[3]
+    dxdt = np.array([vx, vy, ax, ay])
+    return dxdt
 
 
 if __name__ == '__main__':
-    tf = 2
-    num_steps = 10
+    tf = 2*10*np.sqrt(2)/9.8
+    num_steps = 500
     dt = tf / num_steps
     t = 0
-    x = np.zeros(num_steps + 1)
+    x = np.zeros((4, num_steps + 1))
 
-    x[0] = 1
+    x[:, 0] = np.array([0, 0, 10*np.sqrt(2), 10*np.sqrt(2)])
     for i in range(num_steps):
-        x[i + 1] = rk4_stepper(dt, t, x[i], example_func)
+        x[:, i + 1] = rk4_stepper(dt, t, x[:, i], cannonball_ode)
         t += dt
-    print('Value of x at t = 2 is {}'.format(x[-1]))
-    print('Expected value is 1.103639')
+    print('final value of x position = {}'.format(x[0, -1]))
+    print('range of cannonball, vx0 * t = {}'.format(10*np.sqrt(2)*tf))
+    print('rel_error = {}'.format(1 - x[0, -1]/(10*np.sqrt(2)*tf)))
+    show_plot = False
+    if show_plot:
+        import matplotlib.pyplot as plt
+        plt.plot(x[0, :], x[1, :])
+        plt.show()
