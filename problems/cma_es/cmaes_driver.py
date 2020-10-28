@@ -489,16 +489,16 @@ class CMAES(object):
                 optim.logger.add()   # log another "data line", non-standard
 
                 # gather stop conditions, stop if any proc stops
-                # (all procs should have the same stop condition)
+                # (all procs should stop with same stop condition)
                 stops = comm.allgather(optim.stop())
                 for proc_stop in stops:
                     if len(proc_stop) > 0:
                         stop = True
 
             # final output
-            print('termination by', stops)
-            print('best f-value =', optim.result[1])
-            print('best solution =', optim.result[0])
+            # print('termination by', stops)
+            # print('best f-value =', optim.result[1])
+            # print('best solution =', optim.result[0])
             # optim.logger.plot()  # if matplotlib is available
 
             return optim.result[0], optim.result[1]
