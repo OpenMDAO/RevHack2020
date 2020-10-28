@@ -5,6 +5,7 @@ import numpy as np
 import sys
 sys.path.insert(0, "../ode")
 
+from evtol_dynamics_comp_vectorized import Dynamics as DynamicsVectorized
 from evtol_dynamics_comp import Dynamics
 
 
@@ -56,7 +57,7 @@ if __name__ == '__main__':
     p.model.add_subsystem('traj', traj)
 
     phase = dm.Phase(transcription=dm.GaussLobatto(num_segments=25, order=3, solve_segments=False, compressed=False),
-                     ode_class=Dynamics,
+                     ode_class=DynamicsVectorized,
                      ode_init_kwargs={'input_dict': input_dict})
 
     traj.add_phase('phase0', phase)
