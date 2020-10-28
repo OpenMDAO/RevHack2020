@@ -197,9 +197,19 @@ class ComputePitchAnglesUsingSubProblem(om.ExplicitComponent):
 
 ### Optimizers Compatible with Nested Optimization
 
-One consideration with nested optimizations is that some optimizers are not re-entrant. Re-entrant is a computer science term that refers to the ability to call a function while a previous call to that function has not been completed. This is the case when doing nested optimizations. If the optimizers were not written with this in mind, the results will be incorrect.
-In particular, it is known that the current implementation of SLSQP used in scipy’s minimize function is not re-entrant. Therefore, do not use SLSQP at multiple levels when using sub problems. ( Fortunately, there are implementations of SLSQP that are re-entrant, but unfortunately, they have not made their way into scipy. Here is an implementation from [Jacob Williams](https://github.com/jacobwilliams/slsqp)).
-With OpenMDAO’s ScipyOptimizeDriver, one optimizer that is re-entrant is COBYLA. So the user could use SLSQP at one level and COBLYA at the other. Or COBYLA could be used at both levels. The performance varies depending on the problem. For this specific problem, the timings look like this:
+
+
+One consideration with nested optimizations is that some optimizers are not re-entrant. Re-entrant is a computer science term that refers to the ability to call a function while a previous call to that function has not been completed. This is a consideration when doing nested optimizations. If the optimizers were not written with this in mind, the results will be incorrect.
+
+In particular, it is known that the current implementation of the SLSQP optimizer used in scipy’s minimize function is not re-entrant. Therefore, do not use SLSQP at multiple levels when using sub problems. ( Fortunately, there are implementations of SLSQP that are re-entrant, but unfortunately, they have not made their way into scipy. Here is an implementation from [Jacob Williams](https://github.com/jacobwilliams/slsqp)).
+
+With OpenMDAO’s ScipyOptimizeDriver, one optimizer that is available and re-entrant is COBYLA. So the user could use SLSQP at one level and COBYLA at the other. Or COBYLA could be used at both levels. But using SLSQP at both levels will result in incorrect results.
+
+For the code we provided in this solution, we used SLSQP at the top level and COBYLA in the sub problem.
+
+​	***Link to code once it is merged in***
+
+There are no general guidelines on choosing which optimizer at each level. The performance varies depending on the problem. For this specific problem, the timings look like this, for example:
 
 | Outer optimizer | Inner optimizer | Runtime |
 | --------------- | --------------- | ------- |
