@@ -234,8 +234,17 @@ def CLfunc(angle, alpha_stall, AR, e, a0, t_over_c):
     CL1 = CLa * angle
 
     A1 = CD_max / 2
-    A2 = (CL_stall - CD_max * np.sin(alpha_stall) * np.cos(alpha_stall)) * np.sin(alpha_stall) / np.cos(alpha_stall)**2
-    CL2 = A1 * np.sin(2 * angle) + A2 * np.cos(angle)**2 / np.sin(angle)
+    A2 = (CL_stall - CD_max * np.sin(alpha_stall) * np.cos(alpha_stall)) * np.sin(
+        alpha_stall) / np.cos(alpha_stall) ** 2
+    CL2 = A1 * np.sin(2 * angle) + A2 * np.cos(angle) ** 2 / np.sin(angle)
+
+    """
+    0.2270590416478
+    print(CLa, CL_stall, CD_max, CL1, A1, A2, CL2, CL_array, fmax)
+    4.385880808232317 1.1482209105552592 1.244 0.9958538930987082 0.622 0.23224626649810257 1.2522584068822282 [-0.99585389 -1.25225841] -0.9958538930987082
+    log
+    2.7054888859353234e-06
+    """
 
     CL_array = np.vstack((-CL1, -CL2)).T
     CL_array_neg = np.vstack((CL1, CL2)).T
@@ -248,9 +257,12 @@ def CLfunc(angle, alpha_stall, AR, e, a0, t_over_c):
 
     with np.printoptions(linewidth=1024):
         if np.any(angle >= 0):
-            CL[pos_idxs] = -(fmax[pos_idxs, np.newaxis] + 1 / ks_rho * np.log(np.sum(np.exp(ks_rho * (CL_array[pos_idxs, :] - fmax[pos_idxs, np.newaxis]))))).ravel()
+            sum_term = np.sum(np.exp(ks_rho * (CL_array[pos_idxs] - fmax[pos_idxs, np.newaxis])), axis=1)
+            CL[pos_idxs] = -(fmax[pos_idxs] + 1 / ks_rho * np.log(sum_term)).ravel()
         if np.any(angle < 0):
-            CL[neg_idxs] = (fmax_neg[neg_idxs, np.newaxis] + 1 / ks_rho * np.log(np.sum(np.exp(ks_rho * (CL_array_neg[neg_idxs] - fmax_neg[neg_idxs, np.newaxis]))))).ravel()
+            sum_term = np.sum(np.exp(ks_rho * (CL_array_neg[neg_idxs] - fmax_neg[neg_idxs, np.newaxis])), axis=1)
+            CL[neg_idxs] = (fmax_neg[neg_idxs] + 1 / ks_rho * np.log(sum_term)).ravel()
+
     return CL
 
 def CDfunc(angle, AR, e, alpha_stall, coeffs, a0, t_over_c):
@@ -331,8 +343,16 @@ def aero(atov, v_inf, theta, T, alpha_stall, CD0, AR, e, rho, S, m, a0, t_over_c
     v_blown = (v_chorwise ** 2 + v_normal ** 2) ** 0.5
     aoa_blown = cs_atan2(v_normal, v_chorwise)
 
+    # with np.printoptions(linewidth=1000000, threshold=1000000, precision=16):
+    #     print('aoa_blown, alpha_stall, AR, e, a0, t_over_c')
+    #     print(np.vstack([aoa_blown, alpha_stall * np.ones_like(aoa_blown), AR * np.ones_like(aoa_blown), e * np.ones_like(aoa_blown), a0 * np.ones_like(aoa_blown), t_over_c * np.ones_like(aoa_blown)]).T)
+
     CL = CLfunc(aoa_blown, alpha_stall, AR, e, a0, t_over_c)
     CD = CDfunc(aoa_blown, AR, e, alpha_stall, coeffs, a0, t_over_c)
+
+    # with np.printoptions(linewidth=1000000, threshold=1000000):
+    #     print('CL, CD')
+    #     print(np.vstack([CL, CD]).T)
 
     # compute lift and drag forces
     L = 0.5 * rho * v_blown ** 2 * CL * S
@@ -426,8 +446,8 @@ class Dynamics(om.ExplicitComponent):
         # openmdao outputs from the component
         self.add_output('x_dot', val=np.ones(nn))
         self.add_output('y_dot', val=np.ones(nn))
-        self.add_output('vx_dot', val=np.ones(nn))
-        self.add_output('vy_dot', val=np.ones(nn))
+        self.add_output('a_x', val=np.ones(nn))
+        self.add_output('a_y', val=np.ones(nn))
         self.add_output('energy_dot', val=np.ones(nn))
 
         self.add_output('acc', val=np.ones(nn))
@@ -519,16 +539,16 @@ class Dynamics(om.ExplicitComponent):
         outputs['atov'] = atov
         outputs['x_dot'] = vx
         outputs['y_dot'] = vy
-        outputs['vx_dot'] = (thrust * np.sin(theta) - D_fuse * np.sin(atov) - D_wings * np.sin(theta + aoa_blown) - L * np.cos(theta + aoa_blown) - Normal_F * np.cos(theta)) / self.m
-        outputs['vy_dot'] = (thrust * np.cos(theta) - D_fuse * np.cos(atov) - D_wings * np.cos(theta + aoa_blown) + L * np.sin(theta + aoa_blown) + Normal_F * np.sin(theta) - self.m * 9.81) / self.m
+        outputs['a_x'] = (thrust * np.sin(theta) - D_fuse * np.sin(atov) - D_wings * np.sin(theta + aoa_blown) - L * np.cos(theta + aoa_blown) - self.n_props * Normal_F * np.cos(theta)) / self.m
+        outputs['a_y'] = (thrust * np.cos(theta) - D_fuse * np.cos(atov) - D_wings * np.cos(theta + aoa_blown) + L * np.sin(theta + aoa_blown) + self.n_props * Normal_F * np.sin(theta) - self.m * 9.81) / self.m
         outputs['energy_dot'] = power
 
-        outputs['acc'] = np.sqrt(outputs['vx_dot']**2 + outputs['vy_dot']**2) / 9.81
+        outputs['acc'] = np.sqrt(outputs['a_x']**2 + outputs['a_y']**2) / 9.81
         outputs['CL'] = CL
         outputs['CD'] = CD
         outputs['L_wings'] = L
         outputs['D_wings'] = D_wings
-        outputs['D_fuse'] = D_wings
+        outputs['D_fuse'] = D_fuse
         outputs['aoa'] = aoa_blown
         outputs['thrust'] = thrust
         outputs['vi'] = vi
