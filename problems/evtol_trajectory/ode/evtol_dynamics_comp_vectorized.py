@@ -442,7 +442,7 @@ class Dynamics(om.ExplicitComponent):
         self.add_input('theta', val=np.ones(nn))
         self.add_input('vx', val=np.ones(nn))
         self.add_input('vy', val=np.ones(nn))
-        # self.add_input('flight_time', val=15. * 60)
+
         # openmdao outputs from the component
         self.add_output('x_dot', val=np.ones(nn))
         self.add_output('y_dot', val=np.ones(nn))

@@ -344,4 +344,4 @@ The reference solution, where available, is plotted with small black dots.
 We found an objective of 6.68, compared to 6.74 for the nominal case.
 There are some minor differences in the two solutions, but overall they're in pretty good agreement.
 
-![Dymos eVTOL Optimizaiton Results](results.png)
+![Dymos eVTOL Optimizaiton Results](/problems/evtol_trajectory/evtol_dymos/results.png)
