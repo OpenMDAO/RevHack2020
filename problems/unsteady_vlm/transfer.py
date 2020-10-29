@@ -1,12 +1,11 @@
 """ Defines the transfer component to couple aero and struct analyses. """
 
-from __future__ import division
 import numpy
 
-from openmdao.api import Component
+import openmdao.api as om
 
 
-class TransferDisplacements(Component):
+class TransferDisplacements(om.ExplicitComponent):
     """ Performs displacement transfer """
 
     def __init__(self, nx, n, t, fem_origin=0.35):
@@ -19,12 +18,12 @@ class TransferDisplacements(Component):
         self.fem_origin = fem_origin
 
         self.add_output(def_mesh_t, val=numpy.zeros((nx, n, 3)))
-        self.add_param('mesh', val=numpy.zeros((nx, n, 3)))
+        self.add_input('mesh', val=numpy.zeros((nx, n, 3)))
 
         if t > 0:
-            self.add_param(disp_lt, val=numpy.zeros((n, 6)))
+            self.add_input(disp_lt, val=numpy.zeros((n, 6)))
 
-        self.deriv_options['type'] = 'cs'
+        self.declare_partials(of='*', wrt='*', method='cs')
 
         self.num_x = nx
         self.num_y = n
@@ -45,7 +44,7 @@ class TransferDisplacements(Component):
         disp_lt = self.disp_lt
         def_mesh_t = self.def_mesh_t
 
-        print "time step ", t
+        print("time step ", t)
 
         if t > 0:
             self.disp = params[disp_lt]
@@ -53,11 +52,11 @@ class TransferDisplacements(Component):
         w = self.fem_origin
         ref_curve = (1-w) * params['mesh'][0, :, :] + w * params['mesh'][-1, :, :]
 
-        for ind in xrange(nx):
+        for ind in range(nx):
             self.Smesh[ind, :, :] = params['mesh'][ind, :, :] - ref_curve
 
         cos, sin = numpy.cos, numpy.sin
-        for ind in xrange(n):
+        for ind in range(n):
             dx, dy, dz, rx, ry, rz = self.disp[ind, :]
 
             # 1 eye from the axis rotation matrices
@@ -75,7 +74,7 @@ class TransferDisplacements(Component):
             unknowns[def_mesh_t] = self.def_mesh + params['mesh']
 
 
-class TransferLoads(Component):
+class TransferLoads(om.ExplicitComponent):
     """ Performs load transfer """
 
     def __init__(self, nx, n, t, fem_origin=0.35):
@@ -86,11 +85,11 @@ class TransferLoads(Component):
         sec_forces_t = 'sec_forces_%d'%t
         loads_t = 'loads_%d'%t
 
-        self.add_param(def_mesh_t, val=numpy.zeros((nx, n, 3)))
-        self.add_param(sec_forces_t, val=numpy.zeros((n-1, 3), dtype="complex"))
+        self.add_input(def_mesh_t, val=numpy.zeros((nx, n, 3)))
+        self.add_input(sec_forces_t, val=numpy.zeros((n-1, 3), dtype="complex"))
         self.add_output(loads_t, val=numpy.zeros((n, 6), dtype="complex"))
 
-        self.deriv_options['form'] = 'central'
+        self.declare_partials(of='*', wrt='*')
 
         self.n = n
         self.t = t
@@ -124,7 +123,7 @@ class TransferLoads(Component):
                 0.5 * (1-w) * mesh[:-1,  1:, :] + \
                 0.5 *   w   * mesh[1:,  1:, :]
 
-        for ind in xrange(numpy.int(self.n-1)):
+        for ind in range(numpy.int(self.n-1)):
             r = a_pts[0, ind, :] - s_pts[0, ind, :]
             F = sec_forces[ind, :]
             self.moment[ind, :] = numpy.cross(r, F)

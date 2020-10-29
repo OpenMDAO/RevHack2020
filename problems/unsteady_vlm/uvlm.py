@@ -1,10 +1,9 @@
 """ Defines the aerodynamic analysis component using Unsteady Vortex Lattice Method (UVLM) """
 
-from __future__ import division
 import matplotlib.pyplot as plt
 import numpy
 
-from openmdao.api import Component, Group
+import openmdao.api as om
 from scipy.linalg import lu_factor, lu_solve
 
 try:
@@ -61,19 +60,19 @@ def assemble_AIC_matrices(rings_mesh, points, a_mtx, b_mtx=numpy.array([]), also
         c_ny = points.shape[1]
 
         # Chordwise loop through ring elements
-        for el_i in xrange(m_nx - 1):
+        for el_i in range(m_nx - 1):
             el_loc_i = el_i * (m_ny - 1)
 
             # Spanwise loop through ring elements
-            for el_j in xrange(m_ny - 1):
+            for el_j in range(m_ny - 1):
                 el_loc = el_j + el_loc_i
 
                 # Chordwise loop through points
-                for cp_i in xrange(c_nx):
+                for cp_i in range(c_nx):
                     cp_loc_i = cp_i * (c_ny)
 
                     # Spanwise loop through points
-                    for cp_j in xrange(c_ny):
+                    for cp_j in range(c_ny):
                         cp_loc = cp_j + cp_loc_i
 
                         P = points[cp_i, cp_j]                              # local point
@@ -114,7 +113,7 @@ def assemble_AIC_matrices(rings_mesh, points, a_mtx, b_mtx=numpy.array([]), also
     return a_mtx, b_mtx
 
 
-class Geometry(Component):
+class Geometry(om.ExplicitComponent):
     """ Compute various geometric properties for VLM analysis
     b_pts = vortex rings corners defined at quarters of panel 'chords'
     c_pts = collocation points defined at three-quarters of panel 'chords'
@@ -128,21 +127,21 @@ class Geometry(Component):
     def __init__(self, nx, n, t):
         super(Geometry, self).__init__()
 
-        self.add_param('v', val=10.)
-        self.add_param('alpha', val=3.)
-        self.add_param('dt', val=0.1)
-        self.add_param('def_mesh_' + str(t), val=numpy.zeros((nx, n, 3)))
+        self.add_input('v', val=10.)
+        self.add_input('alpha', val=3.)
+        self.add_input('dt', val=0.1)
+        self.add_input('def_mesh_' + str(t), val=numpy.zeros((nx, n, 3)))
         self.add_output('b_pts_' + str(t), val=numpy.zeros((nx, n, 3)))
         self.add_output('c_pts_' + str(t), val=numpy.zeros((nx-1, n-1, 3)))
         self.add_output('starting_vortex_' + str(t), val=numpy.zeros((1, n, 3)))
-        self.add_output('lengths_' + str(t), val=numpy.zeros((nx-1, n-1)), dtype="complex")
+        self.add_output('lengths_' + str(t), val=numpy.zeros((nx-1, n-1)))
         self.add_output('widths_' + str(t), val=numpy.zeros((nx-1, n-1)))
-        self.add_output('normals_' + str(t), val=numpy.zeros((nx-1, n-1, 3)), dtype="complex")
-        self.add_output('v_local_' + str(t), val=numpy.zeros((nx-1, n-1, 3)), dtype="complex")
+        self.add_output('normals_' + str(t), val=numpy.zeros((nx-1, n-1, 3)))
+        self.add_output('v_local_' + str(t), val=numpy.zeros((nx-1, n-1, 3)))
         if t == 0:
             self.add_output('S_ref', val=0.)
 
-        self.deriv_options['form'] = 'central'
+        self.declare_partials(of='*', wrt='*', method='fd', form='central')
 
         self.num_x = nx
         self.num_y = n
@@ -186,8 +185,8 @@ class Geometry(Component):
         b_unrot = self.unrotated_b
 
         # Actually rotate the b_pts
-        for i in xrange(nx):
-            for j in xrange(n):
+        for i in range(nx):
+            for j in range(n):
                 unknowns['b_pts_' + str(t)][i, j, 0] = b_unrot[i, j, :].dot(rot_x)
                 unknowns['b_pts_' + str(t)][i, j, 1] = b_unrot[i, j, 1]
                 unknowns['b_pts_' + str(t)][i, j, 2] = b_unrot[i, j, :].dot(rot_z)
@@ -201,8 +200,8 @@ class Geometry(Component):
         c_unrot = self.unrotated_c
 
         # Actually rotate the c_pts
-        for i in xrange(nx-1):
-            for j in xrange(n-1):
+        for i in range(nx-1):
+            for j in range(n-1):
                 unknowns['c_pts_' + str(t)][i, j, 0] = c_unrot[i, j, :].dot(rot_x)
                 unknowns['c_pts_' + str(t)][i, j, 1] = c_unrot[i, j, 1]
                 unknowns['c_pts_' + str(t)][i, j, 2] = c_unrot[i, j, :].dot(rot_z)
@@ -230,7 +229,7 @@ class Geometry(Component):
 
         # Normalize the normals
         norms = numpy.sqrt(numpy.sum(normals**2, axis=2))
-        for ind in xrange(3):
+        for ind in range(3):
             normals[:, :, ind] /= norms
         unknowns['normals_' + str(t)] = normals
 
@@ -242,7 +241,7 @@ class Geometry(Component):
             surf = unknowns['lengths_' + str(t)] * unknowns['widths_' + str(t)]
             unknowns['S_ref'] = numpy.sum(surf)
 
-class Circulations(Component):
+class Circulations(om.ExplicitComponent):
     """ Define wing and wake panels circulations
     'circ_' + str(t) = wing panel circulations, at the time step t
     'circ_wake_' + str(t) = wake panel circulations, at the time step t
@@ -258,13 +257,13 @@ class Circulations(Component):
         else:
             iw = nw
 
-        self.add_param('dt', val=0.1)
-        self.add_param('c_pts_' + str(t), val=numpy.zeros((nx-1, n-1, 3)))
-        self.add_param('b_pts_' + str(t), val=numpy.zeros((nx, n, 3)))
-        self.add_param('normals_' + str(t), val=numpy.zeros((nx-1, n-1, 3), dtype="complex"))
-        self.add_param('v_local_' + str(t), val=numpy.zeros((nx-1, n-1, 3), dtype="complex"))
+        self.add_input('dt', val=0.1)
+        self.add_input('c_pts_' + str(t), val=numpy.zeros((nx-1, n-1, 3)))
+        self.add_input('b_pts_' + str(t), val=numpy.zeros((nx, n, 3)))
+        self.add_input('normals_' + str(t), val=numpy.zeros((nx-1, n-1, 3), dtype="complex"))
+        self.add_input('v_local_' + str(t), val=numpy.zeros((nx-1, n-1, 3), dtype="complex"))
         size = (n-1) * (nx-1)
-        self.add_state('circ_' + str(t), val=numpy.zeros((size), dtype="complex"))
+        self.add_output('circ_' + str(t), val=numpy.zeros((size), dtype="complex"))
 
         # wake circulations
         # in the first step (dt=0) there is no wake and also there aren't previous results
@@ -273,8 +272,8 @@ class Circulations(Component):
         size_wake = (n-1) * t
         size_a1 = (n-1) * iw
         if t > 0:
-            self.add_param('wake_mesh_' + str(t), val=numpy.zeros((t+1, n, 3), dtype="complex"))
-            self.add_param('circ_' + str(lt), val=numpy.zeros((size), dtype="complex"))
+            self.add_input('wake_mesh_' + str(t), val=numpy.zeros((t+1, n, 3), dtype="complex"))
+            self.add_input('circ_' + str(lt), val=numpy.zeros((size), dtype="complex"))
             self.add_output('circ_wake_' + str(t), val=numpy.zeros((size_wake), dtype="complex"))
             self.add_output('v_wake_on_wing_' + str(t), val=numpy.zeros((size, 3), dtype="complex"))
 
@@ -285,9 +284,9 @@ class Circulations(Component):
         # from dt=2 the wake circulations of the last dt have to be passed as input,
         # because we need to copy them
         if t > 1:
-            self.add_param('circ_wake_' + str(lt), val=numpy.zeros((size_wake - (n-1)), dtype="complex"))
+            self.add_input('circ_wake_' + str(lt), val=numpy.zeros((size_wake - (n-1)), dtype="complex"))
 
-        self.deriv_options['form'] = 'central'
+        self.declare_partials(of='*', wrt='*', method='fd', form='central')
 
         self.num_x = nx
         self.num_y = n
@@ -335,14 +334,14 @@ class Circulations(Component):
             # Dot the matrix with the wake circulations to get the induced velocity
             # on the wing from the wake.
             # This is used to set the RHS of the system to solve for the new circulations.
-            for ind in xrange(3):
+            for ind in range(3):
                 unknowns['v_wake_on_wing_' + str(t)][:, ind] = self.a1_mtx[:, :, ind].dot(unknowns['circ_wake_' + str(t)][:(n-1)*iw])
 
         # Set up the matrix used to compute the circulations on the wing.
         # Do this by dotting the matrix with the normals.
         # We do the same thing in OAS currently.
         self.mtx[:, :] = 0.
-        for ind in xrange(3):
+        for ind in range(3):
             self.mtx[:, :] += (aic_mtx[:, :, ind].T \
                             * params['normals_' + str(t)][:, :, ind].flatten('C')).T
 
@@ -365,7 +364,7 @@ class Circulations(Component):
         # Note that this is based on the effects from the wing itself and the wake.
         unknowns['circ_' + str(t)] = numpy.linalg.solve(self.mtx, self.rhs)
 
-class InducedVelocities(Component):
+class InducedVelocities(om.ExplicitComponent):
     """ Define induced velocities acting on each wing (v) or wake (w) panel
     'v_wing_on_wing_' + str(t) = velocity of c_pts (wing panels) induced by wing panels, at the time step t
     'v_wakewing_on_wake_' + str(t) = velocity of wake_mesh (wake points) induced by wing and wake panels, at the time step t """
@@ -378,12 +377,12 @@ class InducedVelocities(Component):
         else:
             iw = nw
 
-        self.add_param('v', val=10.)
-        self.add_param('dt', val=0.1)
-        self.add_param('b_pts_' + str(t), val=numpy.zeros((nx, n, 3)))
-        self.add_param('c_pts_' + str(t), val=numpy.zeros((nx-1, n-1, 3)))
+        self.add_input('v', val=10.)
+        self.add_input('dt', val=0.1)
+        self.add_input('b_pts_' + str(t), val=numpy.zeros((nx, n, 3)))
+        self.add_input('c_pts_' + str(t), val=numpy.zeros((nx-1, n-1, 3)))
         size = (nx-1) * (n-1)
-        self.add_param('circ_' + str(t), val=numpy.zeros((size), dtype="complex"))
+        self.add_input('circ_' + str(t), val=numpy.zeros((size), dtype="complex"))
         self.add_output('v_wing_on_wing_' + str(t), val=numpy.zeros((size, 3), dtype="complex"))
 
         size_wake_mesh = n * iw
@@ -392,8 +391,8 @@ class InducedVelocities(Component):
         # Only need wake induced velocity if it exists
         if t > 0:
             size_wake = (n-1) * t
-            self.add_param('circ_wake_' + str(t), val=numpy.zeros((size_wake), dtype="complex"))
-            self.add_param('wake_mesh_' + str(t), val=numpy.zeros((t+1, n, 3), dtype="complex"))
+            self.add_input('circ_wake_' + str(t), val=numpy.zeros((size_wake), dtype="complex"))
+            self.add_input('wake_mesh_' + str(t), val=numpy.zeros((t+1, n, 3), dtype="complex"))
             self.add_output('v_wakewing_on_wake_' + str(t), val=numpy.zeros((size_wake_mesh, 3), dtype="complex"))
 
             self.w_wake = numpy.zeros((size_wake_mesh, 3), dtype="complex")
@@ -427,7 +426,7 @@ class InducedVelocities(Component):
         # Obtain the induced velocity on the wing caused by the wing
         # by using the b_mtx previously obtained.
         # We currently do this in OAS too.
-        for ind in xrange(3):
+        for ind in range(3):
             self.v_wing[:, ind] = b_AIC_mtx[:, :, ind].dot(params['circ_' + str(t)])
 
         # Induced velocity on wing caused by wing
@@ -453,14 +452,14 @@ class InducedVelocities(Component):
                                   params['wake_mesh_' + str(t)][1:(iw+1), :, :], self.a3_mtx)
 
             # Obtain the induced velocities on the wake caused by the wing and the wake
-            for ind in xrange(3):
+            for ind in range(3):
                 self.w_wing[:, ind] = self.a2_mtx[:, :, ind].dot(params['circ_' + str(t)])
                 self.w_wake[:, ind] = self.a3_mtx[:, :, ind].dot(params['circ_wake_' + str(t)][:iw*(n-1)])
 
             # Induced velocity on the wake caused by wing and wake
             unknowns['v_wakewing_on_wake_' + str(t)][:] = self.w_wing + self.w_wake
 
-class WakeGeometry(Component):
+class WakeGeometry(om.ExplicitComponent):
     """ Update position of wake mesh in the body frame, adding a line for each time step
     'wake_mesh_' + str(nt) = position of wake mesh points (wake rings corners), at the time step t+1 """
 
@@ -474,17 +473,17 @@ class WakeGeometry(Component):
         else:
             iw = nw
 
-        self.add_param('v', val=10.)
-        self.add_param('dt', val=0.1)
-        self.add_param('starting_vortex_' + str(t), val=numpy.zeros((1, n, 3), dtype="complex"))
+        self.add_input('v', val=10.)
+        self.add_input('dt', val=0.1)
+        self.add_input('starting_vortex_' + str(t), val=numpy.zeros((1, n, 3), dtype="complex"))
         self.add_output('wake_mesh_' + str(nt), val=numpy.zeros((t+2, n, 3), dtype="complex"))
 
         size_wake_mesh = n * iw
         if t > 0:
-            self.add_param('v_wakewing_on_wake_' + str(t), val=numpy.zeros((size_wake_mesh, 3), dtype="complex"))
-            self.add_param('wake_mesh_' + str(t), val=numpy.zeros((t+1, n, 3), dtype="complex"))
+            self.add_input('v_wakewing_on_wake_' + str(t), val=numpy.zeros((size_wake_mesh, 3), dtype="complex"))
+            self.add_input('wake_mesh_' + str(t), val=numpy.zeros((t+1, n, 3), dtype="complex"))
 
-        self.deriv_options['form'] = 'central'
+        self.declare_partials(of='*', wrt='*', method='fd', form='central')
 
         self.num_y = n
         self.t = t
@@ -504,7 +503,7 @@ class WakeGeometry(Component):
 
         # Reshape of v_wakewing_on_wake so it can easily be applied to the wake mesh
         if t > 0:
-            for ind in xrange(3):
+            for ind in range(3):
                 self.v_wakewing_on_wake_resh[:, :, ind] = params['v_wakewing_on_wake_' + str(t)][:, ind].reshape(iw, n, order='C')
 
         # Set old_wake based on if this is the first timestep or subsequent ones
@@ -531,7 +530,7 @@ class WakeGeometry(Component):
         # traveled since then.
         unknowns['wake_mesh_' + str(nt)][0, :, :] = self.new_wake_row
 
-class Forces(Component):
+class Forces(om.ExplicitComponent):
     """ Define aerodynamic forces acting on each wing panel,
     evaluated by unsteady Bernoulli formula
     forces_L_t = lift acting on each wing panel, at the time step t
@@ -543,16 +542,16 @@ class Forces(Component):
 
         lt = t - 1
 
-        self.add_param('rho', val=3.)
-        self.add_param('alpha', val=3.)
-        self.add_param('dt', val=0.1)
-        self.add_param('lengths_' + str(t), val=numpy.zeros((nx-1, n-1)))
-        self.add_param('widths_' + str(t), val=numpy.zeros((nx-1, n-1)))
-        self.add_param('normals_' + str(t), val=numpy.zeros((nx-1, n-1, 3), dtype="complex"))
-        self.add_param('v_local_' + str(t), val=numpy.zeros((nx-1, n-1, 3), dtype="complex"))
+        self.add_input('rho', val=3.)
+        self.add_input('alpha', val=3.)
+        self.add_input('dt', val=0.1)
+        self.add_input('lengths_' + str(t), val=numpy.zeros((nx-1, n-1)))
+        self.add_input('widths_' + str(t), val=numpy.zeros((nx-1, n-1)))
+        self.add_input('normals_' + str(t), val=numpy.zeros((nx-1, n-1, 3), dtype="complex"))
+        self.add_input('v_local_' + str(t), val=numpy.zeros((nx-1, n-1, 3), dtype="complex"))
         size = (nx-1) * (n-1)
-        self.add_param('circ_' + str(t), val=numpy.zeros((size), dtype="complex"))
-        self.add_param('v_wing_on_wing_' + str(t), val=numpy.zeros((size, 3), dtype="complex"))
+        self.add_input('circ_' + str(t), val=numpy.zeros((size), dtype="complex"))
+        self.add_input('v_wing_on_wing_' + str(t), val=numpy.zeros((size, 3), dtype="complex"))
 
         self.add_output('sigma_x_' + str(t), val=numpy.zeros((nx-1, n-1), dtype="complex"))
         self.add_output('sec_L_' + str(t), val=numpy.zeros((nx-1, n-1), dtype="complex"))
@@ -561,8 +560,8 @@ class Forces(Component):
 
         if t > 0:
             size_wake = (n-1) * t
-            self.add_param('v_wake_on_wing_' + str(t), val=numpy.zeros((size, 3), dtype="complex"))
-            self.add_param('sigma_x_' + str(lt), val=numpy.zeros((nx-1, n-1), dtype="complex"))
+            self.add_input('v_wake_on_wing_' + str(t), val=numpy.zeros((size, 3), dtype="complex"))
+            self.add_input('sigma_x_' + str(lt), val=numpy.zeros((nx-1, n-1), dtype="complex"))
 
         self.num_y = n
         self.num_x = nx
@@ -586,7 +585,7 @@ class Forces(Component):
 
         if t > 0:
             # For subsequent timesteps, the induced velocities are from the freestream and induced
-            for ind in xrange(3):
+            for ind in range(3):
                 self.velo[:, :, ind] += params['v_wake_on_wing_' + str(t)][:, ind].reshape(nx-1, n-1, order='C')
 
             self.vind += params['v_wake_on_wing_' + str(t)][:, 2].reshape(nx-1, n-1, order='C')
@@ -622,23 +621,23 @@ class Forces(Component):
         unknowns['sec_L_' + str(t)] = forces_L * params['rho']
         unknowns['sec_D_' + str(t)] = forces_D * params['rho']
 
-        print "L: {},  D: {}".format(numpy.sum(unknowns['sec_L_' + str(t)]), numpy.sum(unknowns['sec_D_' + str(t)]))
+        print("L: {},  D: {}".format(numpy.sum(unknowns['sec_L_' + str(t)]), numpy.sum(unknowns['sec_D_' + str(t)])))
 
         # section forces for structural part
         projected_forces = numpy.array(params['normals_' + str(t)], dtype="complex")
-        for ind in xrange(3):
+        for ind in range(3):
             projected_forces[:, :, ind] *= forces_L
 
         unknowns['sec_forces_' + str(t)] = numpy.zeros((n-1, 3))
-        for x in xrange(nx-1):
+        for x in range(nx-1):
             self.sum_sections += projected_forces[x, :, :]
         unknowns['sec_forces_' + str(t)] = self.sum_sections
 
-class LiftDrag(Component):
+class LiftDrag(om.ExplicitComponent):
     def __init__(self, nx, n, num_dt):
         super(LiftDrag, self).__init__()
-        self.add_param('sec_L_' + str(num_dt-1), val=numpy.zeros((nx-1, n-1), dtype="complex"))
-        self.add_param('sec_D_' + str(num_dt-1), val=numpy.zeros((nx-1, n-1), dtype="complex"))
+        self.add_input('sec_L_' + str(num_dt-1), val=numpy.zeros((nx-1, n-1), dtype="complex"))
+        self.add_input('sec_D_' + str(num_dt-1), val=numpy.zeros((nx-1, n-1), dtype="complex"))
         self.add_output('L', val=0.)
         self.add_output('D', val=0.)
         self.num_dt = num_dt
@@ -646,14 +645,14 @@ class LiftDrag(Component):
         unknowns['L'] = numpy.sum(params['sec_L_' + str(self.num_dt - 1)])
         unknowns['D'] = numpy.sum(params['sec_D_' + str(self.num_dt - 1)])
 
-class AeroCoeffs(Component):
+class AeroCoeffs(om.ExplicitComponent):
     def __init__(self):
         super(AeroCoeffs, self).__init__()
-        self.add_param('S_ref', val=0.)
-        self.add_param('rho', val=0.)
-        self.add_param('v', val=0.)
-        self.add_param('L', val=0.)
-        self.add_param('D', val=0.)
+        self.add_input('S_ref', val=0.)
+        self.add_input('rho', val=0.)
+        self.add_input('v', val=0.)
+        self.add_input('L', val=0.)
+        self.add_input('D', val=0.)
         self.add_output('CL1', val=0.)
         self.add_output('CDi', val=0.)
     def solve_nonlinear(self, params, unknowns, resids):
@@ -666,64 +665,64 @@ class AeroCoeffs(Component):
         unknowns['CL1'] = L / (0.5*rho*v**2*S_ref)
         unknowns['CDi'] = D / (0.5*rho*v**2*S_ref)
 
-class TotalLift(Component):
+class TotalLift(om.ExplicitComponent):
     def __init__(self, CL0):
         super(TotalLift, self).__init__()
-        self.add_param('CL1', val=1.)
+        self.add_input('CL1', val=1.)
         self.add_output('CL', val=1.)
-        self.deriv_options['form'] = 'central'
+        self.declare_partials(of='*', wrt='*', method='fd', form='central')
         self.CL0 = CL0
     def solve_nonlinear(self, params, unknowns, resids):
         unknowns['CL'] = params['CL1'] + self.CL0
 
-class TotalDrag(Component):
+class TotalDrag(om.ExplicitComponent):
     def __init__(self, CD0):
         super(TotalDrag, self).__init__()
-        self.add_param('CDi', val=1.)
+        self.add_input('CDi', val=1.)
         self.add_output('CD', val=1.)
-        self.deriv_options['form'] = 'central'
+        self.declare_partials(of='*', wrt='*', method='fd', form='central')
         self.CD0 = CD0
     def solve_nonlinear(self, params, unknowns, resids):
         unknowns['CD'] = params['CDi'] + self.CD0
 
-class UVLMStates(Group):
+class UVLMStates(om.Group):
     """ Group that contains the aerodynamic states """
 
     def __init__(self, num_x, num_y, num_w, t):
         super(UVLMStates, self).__init__()
 
-        self.add('wgeom_%d'%t,
+        self.add_subsystem('wgeom_%d'%t,
                  Geometry(num_x, num_y, t),
                  promotes=['*'])
-        self.add('circ_%d'%t,
+        self.add_subsystem('circ_%d'%t,
                  Circulations(num_x, num_y, num_w, t),
                  promotes=['*'])
-        self.add('indvel_%d'%t,
+        self.add_subsystem('indvel_%d'%t,
                  InducedVelocities(num_x, num_y, num_w, t),
                  promotes=['*'])
-        self.add('wakegeom_%d'%t,
+        self.add_subsystem('wakegeom_%d'%t,
                  WakeGeometry(num_x, num_y, num_w, t),
                  promotes=['*'])
-        self.add('forces_%d'%t,
+        self.add_subsystem('forces_%d'%t,
                  Forces(num_x, num_y, t),
                  promotes=['*'])
 
 
-class UVLMFunctionals(Group):
+class UVLMFunctionals(om.Group):
     """ Group that contains the aerodynamic functionals used to evaluate performance """
 
     def __init__(self, num_x, num_y, CL0, CD0, num_dt):
         super(UVLMFunctionals, self).__init__()
 
-        self.add('liftdrag',
+        self.add_subsystem('liftdrag',
                  LiftDrag(num_x, num_y, num_dt),
                  promotes=['*'])
-        self.add('aero_coeffs',
+        self.add_subsystem('aero_coeffs',
              AeroCoeffs(),
                  promotes=['*'])
-        self.add('total_CL',
+        self.add_subsystem('total_CL',
                  TotalLift(CL0),
                  promotes=['*'])
-        self.add('total_CD',
+        self.add_subsystem('total_CD',
                  TotalDrag(CD0),
                  promotes=['*'])

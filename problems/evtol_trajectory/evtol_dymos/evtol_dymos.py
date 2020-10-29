@@ -79,7 +79,7 @@ if __name__ == '__main__':
     phase.add_boundary_constraint('y', loc='final', lower=305, ref=100)  # Constraint for the final vertical displacement
     phase.add_boundary_constraint('x', loc='final', equals=900, ref=100)  # Constraint for the final horizontal displacement
     phase.add_boundary_constraint('x_dot', loc='final', equals=67., ref=100)  # Constraint for the final horizontal speed
-    
+
     # Path Constraints
     phase.add_path_constraint('y', lower=0., upper=305, ref=300)  # Constraint for the minimum vertical displacement
     phase.add_path_constraint('acc', upper=0.3, ref=1.0)  # Constraint for the acceleration magnitude

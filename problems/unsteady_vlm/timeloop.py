@@ -1,12 +1,11 @@
-from __future__ import division
-from openmdao.api import Component, Group
+import openmdao.api as om
 
 from transfer import TransferDisplacements, TransferLoads
 from uvlm import UVLMStates
-from spatialbeam import SpatialBeamStates
+from spacialbeam import SpatialBeamStates
 
 
-class SingleStep(Group):
+class SingleStep(om.Group):
     """ Group that contains components that have to be run for each time step """
 
     def __init__(self, num_x, num_y, num_w, E, G, mrho, fem_origin, SBEIG, t):
@@ -17,20 +16,20 @@ class SingleStep(Group):
         name_loads = 'loads_%d'%t
         name_spatialbeamstates = 'spatialbeamstates_%d'%t
 
-        self.add(name_def_mesh,
+        self.add_subsystem(name_def_mesh,
                  TransferDisplacements(num_x, num_y, t, fem_origin),
                  promotes=['*'])
-        self.add(name_vlmstates,
+        self.add_subsystem(name_vlmstates,
                  UVLMStates(num_x, num_y, num_w, t),
                  promotes=['*'])
-        self.add(name_loads,
+        self.add_subsystem(name_loads,
                  TransferLoads(num_x, num_y, t, fem_origin),
                  promotes=['*'])
-        self.add(name_spatialbeamstates,
+        self.add_subsystem(name_spatialbeamstates,
                  SpatialBeamStates(num_x, num_y, E, G, mrho, SBEIG, t),
                  promotes=['*'])
 
-class SingleAeroStep(Group):
+class SingleAeroStep(om.Group):
     """ Group that contains components that have to be run for each time step """
 
     def __init__(self, num_x, num_y, num_w, E, G, mrho, fem_origin, t):
@@ -41,17 +40,17 @@ class SingleAeroStep(Group):
         name_loads = 'loads_%d'%t
         name_spatialbeamstates = 'spatialbeamstates_%d'%t
 
-        self.add(name_def_mesh,
+        self.add_subsystem(name_def_mesh,
               TransferDisplacements(num_x, num_y, t, fem_origin),
               promotes=['*'])
-        self.add(name_vlmstates,
+        self.add_subsystem(name_vlmstates,
               UVLMStates(num_x, num_y, num_w, t),
               promotes=['*'])
-        self.add(name_loads,
+        self.add_subsystem(name_loads,
               TransferLoads(num_x, num_y, t, fem_origin),
               promotes=['*'])
 
-class SingleStructStep(Group):
+class SingleStructStep(om.Group):
     """ Group that contains components that have to be run for each time step """
 
     def __init__(self, num_x, num_y, num_w, E, G, mrho, fem_origin, SBEIG, t):
@@ -67,6 +66,6 @@ class SingleStructStep(Group):
         # self.add(name_loads,
         #          TransferLoads(num_x, num_y, t, fem_origin),
         #          promotes=['*'])
-        self.add(name_spatialbeamstates,
+        self.add_subsystem(name_spatialbeamstates,
                  SpatialBeamStates(num_x, num_y, E, G, mrho, SBEIG, t),
                  promotes=['*'])
