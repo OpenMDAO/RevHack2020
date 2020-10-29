@@ -460,34 +460,7 @@ class Dynamics(om.ExplicitComponent):
         self.add_output('aoa', val=np.ones(nn))
         self.add_output('thrust', val=np.ones(nn))
         self.add_output('vi', val=np.ones(nn))
-        # if self.stall_option == 'ns':
-        #     self.add_output('aoa_max', shape=np.ones(nn))
-        #     self.add_output('aoa_min', shape=np.ones(nn))
-        # self.add_output('acc_max', shape=np.ones(nn))
 
-        # some state variables
-        # self.x_dots = np.ones(self.num_steps + 1, dtype=complex)  # horizontal speeds
-        # self.y_dots = np.ones(self.num_steps + 1, dtype=complex)  # vertical speeds
-        # self.thrusts = np.ones(self.num_steps + 1, dtype=complex)  # thrusts
-        # self.atov = np.ones(self.num_steps + 1, dtype=complex)  # freestream angles to vertical
-        # self.CL = np.zeros(self.num_steps + 1, dtype=complex)  # wing lift coefficients
-        # self.CD = np.zeros(self.num_steps + 1, dtype=complex)  # wing drag coefficients
-        # # self.x = np.zeros(self.num_steps + 1, dtype=complex)  # horizontal positions
-        # # self.y = np.zeros(self.num_steps + 1, dtype=complex)  # vertical positions
-        # self.energy = np.zeros(self.num_steps + 1, dtype=complex)  # electrical energy consumed
-        # self.aoa = np.zeros(self.num_steps, dtype=complex)  # effective wing angles of attack
-        # self.u_inf_prop = np.zeros(self.num_steps,
-        #                            dtype=complex)  # freestream speeds normal to propeller disks
-        # self.v_i = np.zeros(self.num_steps,
-        #                     dtype=complex)  # effective propeller-induced speeds seen by wings
-        # self.acc = np.zeros(self.num_steps, dtype=complex)  # acceleration magnitude in g's
-        # self.a_x = np.zeros(self.num_steps, dtype=complex)  # horizontal acceleration
-        # self.a_y = np.zeros(self.num_steps, dtype=complex)  # vertical acceleration
-        # self.L_wings = np.zeros(self.num_steps, dtype=complex)  # total lift of the wings
-        # self.D_wings = np.zeros(self.num_steps, dtype=complex)  # total drag of the wings
-        # self.D_fuse = np.zeros(self.num_steps, dtype=complex)  # drag of the fuselage
-        # self.N = np.zeros(self.num_steps, dtype=complex)  # total propeller normal force
-        # self.aoa_prop = np.zeros(self.num_steps, dtype=complex)  # propeller angle of attack
 
         # use complex step for partial derivatives
         self.declare_partials('*', '*', method='fd')
