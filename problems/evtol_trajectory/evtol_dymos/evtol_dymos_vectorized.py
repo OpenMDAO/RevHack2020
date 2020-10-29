@@ -98,8 +98,8 @@ if __name__ == '__main__':
     # Setup the driver
     p.driver = om.pyOptSparseDriver()
     p.driver.options['optimizer'] = "SNOPT"
-    p.driver.opt_settings['Major optimality tolerance'] = 1e-5
-    p.driver.opt_settings['Major feasibility tolerance'] = 1e-5
+    p.driver.opt_settings['Major optimality tolerance'] = 1e-6
+    p.driver.opt_settings['Major feasibility tolerance'] = 1e-6
     p.driver.opt_settings['Major iterations limit'] = 1000
     p.driver.opt_settings['Minor iterations limit'] = 100_000_000
     # p.driver.opt_settings['Verify level'] = 3
@@ -132,7 +132,8 @@ if __name__ == '__main__':
                                                               nodes='control_input'))
 
     #
-    # p.set_val('traj.phase0.controls:power', 200000.0)
+    p.set_val('traj.phase0.controls:power', 200000.0)
+    p.set_val('traj.phase0.controls:theta', phase.interpolate(ys=[0, np.radians(85)], nodes='control_input'))
 
     dm.run_problem(p, refine_iteration_limit=0)
     p.run_model()

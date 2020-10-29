@@ -3,15 +3,14 @@ import dymos as dm
 import numpy as np
 
 import sys
+
 sys.path.insert(0, "../ode")
 
 from evtol_dynamics_comp_vectorized import Dynamics as DynamicsVectorized
 from evtol_dynamics_comp import Dynamics
 import verify_data
 
-
 if __name__ == '__main__':
-
     input_arg_1 = 0.0
 
     input_arg_2 = 'ns'
@@ -57,7 +56,8 @@ if __name__ == '__main__':
     traj = dm.Trajectory()
     p.model.add_subsystem('traj', traj)
 
-    phase = dm.Phase(transcription=dm.GaussLobatto(num_segments=25, order=3, solve_segments=True, compressed=True),
+    phase = dm.Phase(transcription=dm.GaussLobatto(num_segments=15, order=3, solve_segments=False,
+                                                   compressed=False),
                      ode_class=Dynamics,
                      ode_init_kwargs={'input_dict': input_dict})
 
@@ -71,27 +71,35 @@ if __name__ == '__main__':
     phase.add_state('energy', fix_initial=True, rate_source='energy_dot', ref=1E7, defect_ref=1E5)
 
     phase.add_control('power', lower=1e3, upper=311000, ref0=1e3, ref=311000, rate_continuity=False)
-    phase.add_control('theta', lower=0., upper=3*np.pi/4, ref0=0, ref=3*np.pi/4, rate_continuity=False)
+    phase.add_control('theta', lower=0., upper=3 * np.pi / 4, ref0=0, ref=3 * np.pi / 4,
+                      rate_continuity=False)
 
     # Objective
     phase.add_objective('energy', loc='final', ref=1E7)
 
     # Boundary Constraints
-    phase.add_boundary_constraint('y', loc='final', lower=305, ref=100)  # Constraint for the final vertical displacement
-    phase.add_boundary_constraint('x', loc='final', equals=900, ref=100)  # Constraint for the final horizontal displacement
-    phase.add_boundary_constraint('x_dot', loc='final', equals=67., ref=100)  # Constraint for the final horizontal speed
-    
+    phase.add_boundary_constraint('y', loc='final', lower=305,
+                                  ref=100)  # Constraint for the final vertical displacement
+    phase.add_boundary_constraint('x', loc='final', equals=900,
+                                  ref=100)  # Constraint for the final horizontal displacement
+    phase.add_boundary_constraint('x_dot', loc='final', equals=67.,
+                                  ref=100)  # Constraint for the final horizontal speed
+
     # Path Constraints
-    phase.add_path_constraint('y', lower=0., upper=305, ref=300)  # Constraint for the minimum vertical displacement
-    phase.add_path_constraint('acc', upper=0.3, ref=1.0)  # Constraint for the acceleration magnitude
-    phase.add_path_constraint('aoa', lower=-15, upper=15, ref0=-15, ref=15)  # Constraint for the acceleration magnitude
-    phase.add_path_constraint('thrust', lower=10, ref0=10, ref=100)  # Constraint for the thrust magnitude
+    phase.add_path_constraint('y', lower=0., upper=305,
+                              ref=300)  # Constraint for the minimum vertical displacement
+    phase.add_path_constraint('acc', upper=0.3,
+                              ref=1.0)  # Constraint for the acceleration magnitude
+    phase.add_path_constraint('aoa', lower=-15, upper=15, ref0=-15,
+                              ref=15)  # Constraint for the acceleration magnitude
+    phase.add_path_constraint('thrust', lower=10, ref0=10,
+                              ref=100)  # Constraint for the thrust magnitude
 
     # Setup the driver
     p.driver = om.pyOptSparseDriver()
     p.driver.options['optimizer'] = "SNOPT"
-    p.driver.opt_settings['Major optimality tolerance'] = 1e-5
-    p.driver.opt_settings['Major feasibility tolerance'] = 1e-5
+    p.driver.opt_settings['Major optimality tolerance'] = 1e-7
+    p.driver.opt_settings['Major feasibility tolerance'] = 1e-7
     p.driver.opt_settings['Major iterations limit'] = 1000
     p.driver.opt_settings['Minor iterations limit'] = 100_000_000
     # p.driver.opt_settings['Verify level'] = 3
@@ -110,22 +118,24 @@ if __name__ == '__main__':
     p.set_val('traj.phase0.t_initial', 0.0)
     p.set_val('traj.phase0.t_duration', 28.36866175)
     p.set_val('traj.phase0.states:x', phase.interpolate(ys=[0, 900], nodes='state_input'))
-    p.set_val('traj.phase0.states:y',  phase.interpolate(ys=[0.01, 300], nodes='state_input'))
+    p.set_val('traj.phase0.states:y', phase.interpolate(ys=[0.01, 300], nodes='state_input'))
     p.set_val('traj.phase0.states:vx', phase.interpolate(ys=[0, 60], nodes='state_input'))
     p.set_val('traj.phase0.states:vy', phase.interpolate(ys=[0.01, 10], nodes='state_input'))
     p.set_val('traj.phase0.states:energy', phase.interpolate(ys=[0, 1E7], nodes='state_input'))
     # p.set_val('traj.phase0.controls:theta', phase.interpolate(ys=[0.05, np.radians(80)], nodes='control_input'))
 
     p.set_val('traj.phase0.controls:power', phase.interpolate(xs=np.linspace(0, 28.368, 500),
-                                                              ys=verify_data.powers.ravel(), nodes='control_input'))
+                                                              ys=verify_data.powers.ravel(),
+                                                              nodes='control_input'))
     p.set_val('traj.phase0.controls:theta', phase.interpolate(xs=np.linspace(0, 28.368, 500),
-                                                              ys=verify_data.thetas.ravel(), nodes='control_input'))
+                                                              ys=verify_data.thetas.ravel(),
+                                                              nodes='control_input'))
 
     #
-    # p.set_val('traj.phase0.controls:power', 200000.0)
+    p.set_val('traj.phase0.controls:power', 200000.0)
+    p.set_val('traj.phase0.controls:theta', phase.interpolate(ys=[0, np.radians(85)], nodes='control_input'))
 
-
-    # dm.run_problem(p, refine_iteration_limit=0)
+    dm.run_problem(p, refine_iteration_limit=0)
     p.run_model()
     # with np.printoptions(linewidth=1024):
     #     p.check_totals(compact_print=True)
@@ -135,6 +145,7 @@ if __name__ == '__main__':
     exp_out = traj.simulate(record_file='simulation.sql')
 
     import matplotlib.pyplot as plt
+
     plt.plot(exp_out.get_val('traj.phase0.timeseries.states:x'),
              exp_out.get_val('traj.phase0.timeseries.states:y'))
     plt.show()
