@@ -9,24 +9,6 @@
 A user provides a set of ordinary differential equations (ODE) in the form of an OpenMDAO system.
 Dymos can then be used to perform simple time integration of the system, or to optimize it using shooting methods or pseudospectral optimal control techniques.
 
-## A nested-problem approach utilizing state-transformation matrices
-
-A second approach used to tackle this integraiton will be to build a wrapper around a standard numerical integration tool.
-But in general, numerical integrators do not allow one to propagate derivatives of the final state across the time integration.
-How does one determine the sensitivity of the final state to the initial state and controls when using something like [scipy.integrate.solve_ivp](https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.solve_ivp.html)?
-Finite differencing can be utilized, but this means re-propagating the trajectory each time a design variable is perturbed, making the calculation extremely expensive.
-In the approach used here, we will use OpenMDAO to propagate a "state transition matrix" along-side the user's equations of motion.
-The state-transition matrix is a matrix which, multiplied by the initial state, yields the final state.
-
-<a href="https://www.codecogs.com/eqnedit.php?latex=\bar{x}_f&space;=&space;\left[&space;\phi&space;\right]&space;\bar{x}_0" target="_blank"><img src="https://latex.codecogs.com/svg.latex?\bar{x}_f&space;=&space;\left[&space;\phi&space;\right]&space;\bar{x}_0" title="\bar{x}_f = \left[ \phi \right] \bar{x}_0" /></a>
-
-That is, the state transition matrix ($\phi$) is the jacobian matrix of the final state w.r.t. the initial state.
-To integrate the state transition matrix, we start with a state transition matrix equal to the identity matrix at the initial time, and use the following formula as its derivative:
-
-<a href="https://www.codecogs.com/eqnedit.php?latex=\left[&space;\dot{\phi}&space;\right]&space;=&space;f_x&space;\left[&space;\phi&space;\right]" target="_blank"><img src="https://latex.codecogs.com/svg.latex?\left[&space;\dot{\phi}&space;\right]&space;=&space;f_x&space;\left[&space;\phi&space;\right]" title="\left[ \dot{\phi} \right] = f_x \left[ \phi \right]" /></a>
-
-An excellent discussion of the state transition matrix is provided by [Pellegrini and Russell](https://www.researchgate.net/publication/281440699_On_the_Accuracy_of_Trajectory_State-Transition_Matrices).
-
 ## Implementation using a manually-coded numerical integration technique
 
 A third option is to implement a numerical propagation technique as a for loop within a component and propagate the state and the derivatives through each step.
