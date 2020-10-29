@@ -58,4 +58,27 @@ force_pts + mesh --> force_pts_velocities.
 - Don't need intermediate calcs for anything else.
 - They are huge (216 x 12 x 17 x 3)
 
-Baring that, should the surfaces be solved by independent VL calculations instead of all together
+Barring that, should the surfaces be solved by independent VL calculations instead of all together
+
+Normal Way
+OAS stability deriv time: 8.344069242477417
+stability derivs
+CM_alpha [-0.2959168]
+CL_alpha [0.07197423]
+CN_beta [0.27372895]
+
+Setup time: 0.0021522045135498047
+Run time: 11.343416690826416
+done
+
+Coloring - numbers are wrong
+OAS stability deriv time: 24.654993295669556
+stability derivs
+CM_alpha [-0.29591672]
+CL_alpha [0.07197422]
+CN_beta [0.27372769]
+
+Setup time: 0.0022094249725341797
+Run time: 34.72225594520569
+done
+
