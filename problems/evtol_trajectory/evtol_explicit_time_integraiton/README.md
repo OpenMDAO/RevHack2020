@@ -1,1 +1,3 @@
-# A state-transition-matrix approach to a differentiable integration of the eVTOL trajectory.
+# The solve_ivp style solution 
+
+This solution approach is based on how you would use scipy's solve_ivp to numerica
