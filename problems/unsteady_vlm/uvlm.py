@@ -1,16 +1,15 @@
 """ Defines the aerodynamic analysis component using Unsteady Vortex Lattice Method (UVLM) """
 
+from __future__ import division
 import matplotlib.pyplot as plt
 import numpy
 
 import openmdao.api as om
 from scipy.linalg import lu_factor, lu_solve
 
-try:
-    import lib
-    fortran_flag = True
-except:
-    fortran_flag = False
+fortran_flag = False
+if fortran_flag:
+    from lib import lib
 
 def view_mat(mat):
     import matplotlib.pyplot as plt
@@ -27,7 +26,9 @@ def norm(vec):
 def calc_vorticity(A, B, P):
     """ Define the vorticity induced by the segment AB to P """
     rAP = P - A
+    rAP = numpy.array(rAP, dtype=numpy.float)
     rBP = P - B
+    rBP = numpy.array(rBP, dtype=numpy.float)
     rAP_len = norm(rAP)
     rBP_len = norm(rBP)
     cross = numpy.cross(rAP, rBP)
@@ -169,11 +170,11 @@ class Geometry(om.ExplicitComponent):
         n = self.num_y
         t = self.t
 
-        mesh = outputs['def_mesh_' + str(t)]
+        mesh = inputs['def_mesh_' + str(t)]
 
         # distance of the last row of points chordwise from the trailing edge
         # last row of b_pts, defined with dist. This is also the starting vortex line
-        dist_x = 0.3 * outputs['v'] * outputs['dt']
+        dist_x = 0.3 * inputs['v'] * inputs['dt']
 
         # Set all unrotated_b points based on the mesh (as is currently done in OAS),
         # except the last one which will be based on the velocity and timestep
@@ -184,7 +185,7 @@ class Geometry(om.ExplicitComponent):
         self.unrotated_b[-1, :, 0] += dist_x
 
         # Rotation of b_pts and c_pts due to the angle of attack alpha
-        alpha_conv = outputs['alpha'] * numpy.pi / 180.
+        alpha_conv = inputs['alpha'] * numpy.pi / 180.
         cosa = numpy.cos(-alpha_conv)
         sina = numpy.sin(-alpha_conv)
         rot_x = numpy.array([cosa, 0, -sina])
@@ -242,7 +243,7 @@ class Geometry(om.ExplicitComponent):
         outputs['normals_' + str(t)] = normals
 
         # Panel velocity in the inertial frame
-        outputs['v_local_' + str(t)][:, :, 0] = outputs['v']
+        outputs['v_local_' + str(t)][:, :, 0] = inputs['v']
 
         # Surface area of the half wing if this is the first timestep
         if t == 0:
@@ -324,30 +325,30 @@ class Circulations(om.ExplicitComponent):
         lt = self.lt
         iw = self.iw
 
-        aic_mtx, _ = assemble_AIC_matrices(outputs['b_pts_' + str(t)], outputs['c_pts_' + str(t)], self.a_mtx, self.b_mtx)
+        aic_mtx, _ = assemble_AIC_matrices(inputs['b_pts_' + str(t)], inputs['c_pts_' + str(t)], self.a_mtx, self.b_mtx)
 
         # Set the wake circulations based on previous circulations from the wing.
         if t == 1:
             # In the first timestep there's only one circulation to pass to the wake
-            outputs['circ_wake_' + str(t)] = outputs['circ_' + str(lt)][(nx-2)*(n-1):]
+            outputs['circ_wake_' + str(t)] = inputs['circ_' + str(lt)][(nx-2)*(n-1):]
 
         if t > 1:
             # Set the first row of the wake circulations with the last row of the wing circulations
-            outputs['circ_wake_' + str(t)][:(n-1)] = outputs['circ_' + str(lt)][(nx-2)*(n-1):]
-            outputs['circ_wake_' + str(t)][(n-1):] = outputs['circ_wake_' + str(lt)]
+            outputs['circ_wake_' + str(t)][:(n-1)] = inputs['circ_' + str(lt)][(nx-2)*(n-1):]
+            outputs['circ_wake_' + str(t)][(n-1):] = inputs['circ_wake_' + str(lt)]
 
         # velocity of c_pts (wing panels) induced by wake panels (in inertial frame)
         if t > 0:
             # Shift the c_pts in the negative direction based on the velocity
             # at the wing. This velocity is just freestream velocity.
-            c_pts_inertial_frame = outputs['c_pts_' + str(t)] - outputs['v_local_' + str(t)] * outputs['dt'] * t
+            c_pts_inertial_frame = inputs['c_pts_' + str(t)] - inputs['v_local_' + str(t)] * inputs['dt'] * t
 
             # The inertial frame is body-fixed.
             # Therefore we must update the points based on the velocities.
 
             # a1_mtx is the matrix used to get the induced velocities on the wing from the wake.
             # This uses the wake_mesh which is really the b_pts for the wake
-            self.a1_mtx, _ = assemble_AIC_matrices(outputs['wake_mesh_' + str(t)][:iw+1, :, :], c_pts_inertial_frame, self.a1_mtx, wake=True)
+            self.a1_mtx, _ = assemble_AIC_matrices(inputs['wake_mesh_' + str(t)][:iw+1, :, :], c_pts_inertial_frame, self.a1_mtx, wake=True)
 
             # Dot the matrix with the wake circulations to get the induced velocity
             # on the wing from the wake.
@@ -361,10 +362,10 @@ class Circulations(om.ExplicitComponent):
         self.mtx[:, :] = 0.
         for ind in range(3):
             self.mtx[:, :] += (aic_mtx[:, :, ind].T \
-                            * outputs['normals_' + str(t)][:, :, ind].flatten('C')).T
+                            * inputs['normals_' + str(t)][:, :, ind].flatten('C')).T
 
         # On the first timestep, only the freestream velocity is acting on the panels.
-        v_c_pts = outputs['v_local_' + str(t)].reshape(-1, 3, order='C')
+        v_c_pts = inputs['v_local_' + str(t)].reshape(-1, 3, order='C')
 
         if t > 0:
             # On subsequent timesteps, both the freestream velocity and the velocity
@@ -372,7 +373,7 @@ class Circulations(om.ExplicitComponent):
             v_c_pts += outputs['v_wake_on_wing_' + str(t)]
 
         # Reshape the normals so that we can correctly produce the rhs
-        norm = outputs['normals_' + str(t)].reshape(-1, 3, order='C')
+        norm = inputs['normals_' + str(t)].reshape(-1, 3, order='C')
 
         # Populate the rhs vector
         self.rhs = numpy.sum(-norm * v_c_pts, axis=1)
@@ -431,7 +432,7 @@ class InducedVelocities(om.ExplicitComponent):
 
         self.v_wing = numpy.zeros((size, 3), dtype="complex")
         self.w_wing = numpy.zeros((size_wake_mesh, 3), dtype="complex")
-        self.a2_mtx = numpy.zeros((size_wake_mesh, size, 3), dtype="complex")
+        self.a2_mtx = numpy.zeros((size_wake_mesh, size, 3))
 
         # Cap the size of the wake mesh based on the desired number of wake rows
         if t < nw:
@@ -448,13 +449,13 @@ class InducedVelocities(om.ExplicitComponent):
         t = self.t
         iw = self.iw
 
-        _, b_AIC_mtx = assemble_AIC_matrices(outputs['b_pts_' + str(t)], outputs['c_pts_' + str(t)], self.a_mtx, self.b_mtx, True)
+        _, b_AIC_mtx = assemble_AIC_matrices(inputs['b_pts_' + str(t)], inputs['c_pts_' + str(t)], self.a_mtx, self.b_mtx, True)
 
         # Obtain the induced velocity on the wing caused by the wing
         # by using the b_mtx previously obtained.
         # We currently do this in OAS too.
         for ind in range(3):
-            self.v_wing[:, ind] = b_AIC_mtx[:, :, ind].dot(outputs['circ_' + str(t)])
+            self.v_wing[:, ind] = b_AIC_mtx[:, :, ind].dot(inputs['circ_' + str(t)])
 
         # Induced velocity on wing caused by wing
         outputs['v_wing_on_wing_' + str(t)] = self.v_wing
@@ -463,25 +464,25 @@ class InducedVelocities(om.ExplicitComponent):
         if t > 0:
 
             # Translate the wake mesh into the local frame
-            translation = numpy.array([outputs['v'] * outputs['dt'] * t, 0., 0.])
-            self.wake_mesh_local_frame = outputs['wake_mesh_' + str(t)] + translation
+            translation = numpy.array([inputs['v'] * inputs['dt'] * t, 0., 0.])
+            self.wake_mesh_local_frame = inputs['wake_mesh_' + str(t)] + translation
 
-            # outputs['wake_mesh_' + str(t)] doesn't change with each timestep
+            # inputs['wake_mesh_' + str(t)] doesn't change with each timestep
             # but self.wake_mesh_local_frame does change with each timestep
 
             # Assemble a2_mtx which is used to calculate the wing induced velocity
             # caused by the wake
-            self.a2_mtx, _ = assemble_AIC_matrices(outputs['b_pts_' + str(t)], self.wake_mesh_local_frame[1:,:,], self.a2_mtx)
+            self.a2_mtx, _ = assemble_AIC_matrices(inputs['b_pts_' + str(t)], self.wake_mesh_local_frame[1:,:,], self.a2_mtx)
 
             # Assemble a3_mtx which is used to calculate the wake induced velocity
             # caused by the wake
-            self.a3_mtx, _ = assemble_AIC_matrices(outputs['wake_mesh_' + str(t)][:(iw+1), :, :],
-                                  outputs['wake_mesh_' + str(t)][1:(iw+1), :, :], self.a3_mtx)
+            self.a3_mtx, _ = assemble_AIC_matrices(inputs['wake_mesh_' + str(t)][:(iw+1), :, :],
+                                  inputs['wake_mesh_' + str(t)][1:(iw+1), :, :], self.a3_mtx)
 
             # Obtain the induced velocities on the wake caused by the wing and the wake
             for ind in range(3):
-                self.w_wing[:, ind] = self.a2_mtx[:, :, ind].dot(outputs['circ_' + str(t)])
-                self.w_wake[:, ind] = self.a3_mtx[:, :, ind].dot(outputs['circ_wake_' + str(t)][:iw*(n-1)])
+                self.w_wing[:, ind] = self.a2_mtx[:, :, ind].dot(inputs['circ_' + str(t)])
+                self.w_wake[:, ind] = self.a3_mtx[:, :, ind].dot(inputs['circ_wake_' + str(t)][:iw*(n-1)])
 
             # Induced velocity on the wake caused by wing and wake
             outputs['v_wakewing_on_wake_' + str(t)][:] = self.w_wing + self.w_wake
@@ -541,27 +542,27 @@ class WakeGeometry(om.ExplicitComponent):
         # Reshape of v_wakewing_on_wake so it can easily be applied to the wake mesh
         if t > 0:
             for ind in range(3):
-                self.v_wakewing_on_wake_resh[:, :, ind] = outputs['v_wakewing_on_wake_' + str(t)][:, ind].reshape(iw, n, order='C')
+                self.v_wakewing_on_wake_resh[:, :, ind] = inputs['v_wakewing_on_wake_' + str(t)][:, ind].reshape(iw, n, order='C')
 
         # Set old_wake based on if this is the first timestep or subsequent ones
         if t == 0:
-            self.old_wake = outputs['starting_vortex_' + str(t)]
+            self.old_wake = inputs['starting_vortex_' + str(t)]
         else:
-            self.old_wake = outputs['wake_mesh_' + str(t)]
+            self.old_wake = inputs['wake_mesh_' + str(t)]
 
             # Here we apply the reshaped induced velocity on the wake caused by
             # the wing and the wake to the wake mesh.
             # This gives us the wake mesh from the third row to the end.
             outputs['wake_mesh_' + str(nt)][2:(iw+2), :, :] = self.old_wake[1:(iw+1), :, :] \
-                                                   + self.v_wakewing_on_wake_resh * outputs['dt']
+                                                   + self.v_wakewing_on_wake_resh * inputs['dt']
             outputs['wake_mesh_' + str(nt)][(iw+2):, :, :] = self.old_wake[(iw+1):, :, :]
 
         # Update the second wake_mesh row
         outputs['wake_mesh_' + str(nt)][1, :, :] = self.old_wake[0, :, :]
 
         # Addition of a new wake row
-        self.new_wake_row = outputs['starting_vortex_' + str(t)]
-        self.new_wake_row[0, :, 0] -= outputs['v'] * outputs['dt'] * (t+1)
+        self.new_wake_row = inputs['starting_vortex_' + str(t)]
+        self.new_wake_row[0, :, 0] -= inputs['v'] * inputs['dt'] * (t+1)
 
         # Set the first wake_mesh row based on the starting vortex and the distance
         # traveled since then.
@@ -623,18 +624,18 @@ class Forces(om.ExplicitComponent):
         lt = self.lt
 
         # If this is the first timestep, only the freestream velocity is acting on the panels
-        self.velo = outputs['v_local_' + str(t)]
-        self.vind = outputs['v_wing_on_wing_' + str(t)][:, 2].reshape(nx-1, n-1, order='C')
+        self.velo = inputs['v_local_' + str(t)]
+        self.vind = inputs['v_wing_on_wing_' + str(t)][:, 2].reshape(nx-1, n-1, order='C')
 
         if t > 0:
             # For subsequent timesteps, the induced velocities are from the freestream and induced
             for ind in range(3):
-                self.velo[:, :, ind] += outputs['v_wake_on_wing_' + str(t)][:, ind].reshape(nx-1, n-1, order='C')
+                self.velo[:, :, ind] += inputs['v_wake_on_wing_' + str(t)][:, ind].reshape(nx-1, n-1, order='C')
 
-            self.vind += outputs['v_wake_on_wing_' + str(t)][:, 2].reshape(nx-1, n-1, order='C')
+            self.vind += inputs['v_wake_on_wing_' + str(t)][:, 2].reshape(nx-1, n-1, order='C')
 
         # Reshape the circulations into a matrix so we can more easily manipulate the values
-        circ_mtx = outputs['circ_' + str(t)].reshape(nx-1, n-1, order='C')
+        circ_mtx = inputs['circ_' + str(t)].reshape(nx-1, n-1, order='C')
 
         # For the first row of circulations, use the values.
         # For all other rows, use the difference between that value and the previous value.
@@ -646,28 +647,28 @@ class Forces(om.ExplicitComponent):
         # from the leading edge
         outputs['sigma_x_' + str(t)] = 0.5 * self.loc_circ
         outputs['sigma_x_' + str(t)][1:, :] += circ_mtx[:-1, :]
-        outputs['sigma_x_' + str(t)] *= outputs['lengths_' + str(t)]
+        outputs['sigma_x_' + str(t)] *= inputs['lengths_' + str(t)]
 
         # Obtain the change in circulation per timestep
         if t == 0:
-            dCirc_dt = outputs['sigma_x_' + str(t)] / outputs['dt']
+            dCirc_dt = outputs['sigma_x_' + str(t)] / inputs['dt']
         else:
-            dCirc_dt = (outputs['sigma_x_' + str(t)] - outputs['sigma_x_' + str(lt)]) / outputs['dt']
+            dCirc_dt = (outputs['sigma_x_' + str(t)] - inputs['sigma_x_' + str(lt)]) / inputs['dt']
 
         # Lift for each panel
-        forces_L = (self.velo[:, :, 0] * self.loc_circ + dCirc_dt) * outputs['widths_' + str(t)] * outputs['normals_' + str(t)][:, :, 2]
+        forces_L = (self.velo[:, :, 0] * self.loc_circ + dCirc_dt) * inputs['widths_' + str(t)] * inputs['normals_' + str(t)][:, :, 2]
 
         # Induced drag for each panel
-        forces_D = outputs['widths_' + str(t)] * (-self.vind * self.loc_circ
-             + dCirc_dt * outputs['normals_' + str(t)][:, :, 0])
+        forces_D = inputs['widths_' + str(t)] * (-self.vind * self.loc_circ
+             + dCirc_dt * inputs['normals_' + str(t)][:, :, 0])
 
-        outputs['sec_L_' + str(t)] = forces_L * outputs['rho']
-        outputs['sec_D_' + str(t)] = forces_D * outputs['rho']
+        outputs['sec_L_' + str(t)] = forces_L * inputs['rho']
+        outputs['sec_D_' + str(t)] = forces_D * inputs['rho']
 
         print("L: {},  D: {}".format(numpy.sum(outputs['sec_L_' + str(t)]), numpy.sum(outputs['sec_D_' + str(t)])))
 
         # section forces for structural part
-        projected_forces = numpy.array(outputs['normals_' + str(t)], dtype="complex")
+        projected_forces = numpy.array(inputs['normals_' + str(t)], dtype="complex")
         for ind in range(3):
             projected_forces[:, :, ind] *= forces_L
 
@@ -694,8 +695,8 @@ class LiftDrag(om.ExplicitComponent):
         self.num_dt = num_dt
 
     def compute(self, inputs, outputs):
-        outputs['L'] = numpy.sum(outputs['sec_L_' + str(self.num_dt - 1)])
-        outputs['D'] = numpy.sum(outputs['sec_D_' + str(self.num_dt - 1)])
+        outputs['L'] = numpy.sum(inputs['sec_L_' + str(self.num_dt - 1)])
+        outputs['D'] = numpy.sum(inputs['sec_D_' + str(self.num_dt - 1)])
 
 class AeroCoeffs(om.ExplicitComponent):
     def setup(self):
@@ -708,11 +709,11 @@ class AeroCoeffs(om.ExplicitComponent):
         self.add_output('CDi', val=0.)
 
     def compute(self, inputs, outputs):
-        S_ref = outputs['S_ref']
-        rho = outputs['rho']
-        v = outputs['v']
-        L = outputs['L']
-        D = outputs['D']
+        S_ref = inputs['S_ref']
+        rho = inputs['rho']
+        v = inputs['v']
+        L = inputs['L']
+        D = inputs['D']
 
         outputs['CL1'] = L / (0.5*rho*v**2*S_ref)
         outputs['CDi'] = D / (0.5*rho*v**2*S_ref)
@@ -729,7 +730,7 @@ class TotalLift(om.ExplicitComponent):
         self.CL0 = CL0
 
     def compute(self, inputs, outputs):
-        outputs['CL'] = outputs['CL1'] + self.CL0
+        outputs['CL'] = inputs['CL1'] + self.CL0
 
     def setup_partials(self):
         self.declare_partials(of='*', wrt='*', method='fd', form='central')
@@ -749,7 +750,7 @@ class TotalDrag(om.ExplicitComponent):
         self.declare_partials(of='*', wrt='*', method='fd', form='central')
 
     def compute(self, inputs, outputs):
-        outputs['CD'] = outputs['CDi'] + self.CD0
+        outputs['CD'] = inputs['CDi'] + self.CD0
 
 class UVLMStates(om.Group):
     """ Group that contains the aerodynamic states """
