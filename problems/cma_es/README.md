@@ -24,9 +24,9 @@ Would it be interesting to subclass or identify some common base class for evolu
 
 2. OpenMDAO Driver using CMA-ES optimizer
 
-    As an initial step, an OpenMDAO [CMAESDriver](cmaes_driver.py) class was implemented based heavily on the existing [DifferentialEvolutionDriver](https://github.com/OpenMDAO/OpenMDAO/blob/master/openmdao/drivers/differential_evolution_driver.py).  This implementation uses the simple [functional](http://cma.gforge.inria.fr/apidocs-pycma/cma.evolution_strategy.html#fmin) `cmaes` API when running in serial, and the [object-oriented](http://cma.gforge.inria.fr/apidocs-pycma/cma.interfaces.OOOptimizer.html) API for parallel execuition.
+    As an initial step, an OpenMDAO [CMAESDriver](cmaes_driver.py) class was implemented based heavily on the existing [DifferentialEvolutionDriver](https://github.com/OpenMDAO/OpenMDAO/blob/master/openmdao/drivers/differential_evolution_driver.py).   See [this Jupyter Notebook](CMAESDriver.ipynb) to see the driver in action.
 
-    The Object-oriented API is useful because it allows for custom logic after case generation.  For parallel execution, we are able to use OpeMDAO's infrastructure for concurrent execution to evaluate the generated cases using all available processors.
+    This implementation uses the simple [functional](http://cma.gforge.inria.fr/apidocs-pycma/cma.evolution_strategy.html#fmin) `cmaes` API when running in serial, and the [object-oriented](http://cma.gforge.inria.fr/apidocs-pycma/cma.interfaces.OOOptimizer.html) API for parallel execution. The object-oriented API is useful because it allows for custom logic after case generation.  For parallel execution, we are able to use OpenMDAO's infrastructure for concurrent execution to evaluate the generated cases using all available processors.
 
 3. Common base class for evolutionary optimizers
 
