@@ -239,15 +239,17 @@ These can be used to impose practical constraints (such as altitude or accelerat
 Here we're using SNOPT to optimize the problem,
 In the original proposal, the user asked why it seemed to perform so much better than SLSQP.
 Unfortunately, it's just far more capable.
+
 Development of high-quality, sparse-aware optimizers takes years of work.
 Of the options freely available, IPOPT tends to be nearly on par with SNOPT for use in Dymos.
-For this particular problem it settles in around the same objective (6.68E-1) but just fails to converge.
-Perhaps through playing with some of its options, better convergence can be achieved.
-The settings tried for IPOPT are included below, for users who would like to experiment with it.
+For this particular problem it settles in around the same objective (6.68E-1).
+Loosening the convergence tolerance a bit makes it converge fairly quickly.
+The settings tried for IPOPT are included below, but commented out, for users who would like to experiment with it.
 
 The `driver.declare_coloring` call below is key to the performance of Dymos.
 Despite the fact that we're using an ODE with dense partials, a significant speedup can be achieved by invoking OpenMDAO's derivative coloring.
 This can drastically reduce the time needed to optimize problems, and even more so if the ODE is written with sparse partials.
+
 ```python
     p.driver = om.pyOptSparseDriver()
     
@@ -263,6 +265,7 @@ This can drastically reduce the time needed to optimize problems, and even more 
     # p.driver.opt_settings['alpha_for_y'] = 'safer-min-dual-infeas'
     # p.driver.opt_settings['print_level'] = 5
     # p.driver.opt_settings['nlp_scaling_method'] = 'gradient-based'
+    # p.driver.opt_settings['tol'] = 1.0E-5
     
     p.driver.declare_coloring(tol=1.0E-8)
 ```
@@ -344,4 +347,4 @@ The reference solution, where available, is plotted with small black dots.
 We found an objective of 6.68, compared to 6.74 for the nominal case.
 There are some minor differences in the two solutions, but overall they're in pretty good agreement.
 
-![Dymos eVTOL Optimizaiton Results](/problems/evtol_trajectory/evtol_dymos/results.png)
+![Dymos eVTOL Optimizaiton Results](results.png)

@@ -112,12 +112,14 @@ if __name__ == '__main__':
     # p.driver.opt_settings['alpha_for_y'] = 'safer-min-dual-infeas'
     # p.driver.opt_settings['print_level'] = 5
     # p.driver.opt_settings['nlp_scaling_method'] = 'gradient-based'
-    # p.driver.declare_coloring(tol=1.0E-8)
+    # p.driver.opt_settings['tol'] = 1.0E-5
+
+    p.driver.declare_coloring(tol=1.0E-8)
 
     p.setup()
 
     p.set_val('traj.phase0.t_initial', 0.0)
-    p.set_val('traj.phase0.t_duration', 28.36866175)
+    p.set_val('traj.phase0.t_duration', 30)
     p.set_val('traj.phase0.states:x', phase.interpolate(ys=[0, 900], nodes='state_input'))
     p.set_val('traj.phase0.states:y', phase.interpolate(ys=[0.01, 300], nodes='state_input'))
     p.set_val('traj.phase0.states:vx', phase.interpolate(ys=[0, 60], nodes='state_input'))
