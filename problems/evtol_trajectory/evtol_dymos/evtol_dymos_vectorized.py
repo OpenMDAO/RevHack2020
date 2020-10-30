@@ -56,8 +56,8 @@ if __name__ == '__main__':
     traj = dm.Trajectory()
     p.model.add_subsystem('traj', traj)
 
-    phase = dm.Phase(transcription=dm.GaussLobatto(num_segments=10, order=3, solve_segments=False,
-                                                   compressed=False),
+    phase = dm.Phase(transcription=dm.GaussLobatto(num_segments=10, order=3, solve_segments=True,
+                                                   compressed=True),
                      ode_class=DynamicsVectorized,
                      ode_init_kwargs={'input_dict': input_dict})
 
@@ -68,7 +68,7 @@ if __name__ == '__main__':
     phase.add_state('y', fix_initial=True, rate_source='y_dot', ref0=0, ref=300, defect_ref=300)
     phase.add_state('vx', fix_initial=True, rate_source='a_x', ref0=0, ref=10)
     phase.add_state('vy', fix_initial=True, rate_source='a_y', ref0=0, ref=10)
-    phase.add_state('energy', fix_initial=True, rate_source='energy_dot', ref=1E7, defect_ref=1E5)
+    phase.add_state('energy', fix_initial=True, rate_source='energy_dot', ref0=0, ref=1E7, defect_ref=1E5)
 
     phase.add_control('power', lower=1e3, upper=311000, ref0=1e3, ref=311000, rate_continuity=False)
     phase.add_control('theta', lower=0., upper=3 * np.pi / 4, ref0=0, ref=3 * np.pi / 4,
@@ -77,7 +77,7 @@ if __name__ == '__main__':
     phase.add_timeseries_output(['CL', 'CD'])
 
     # Objective
-    phase.add_objective('energy', loc='final', ref=1E7)
+    phase.add_objective('energy', loc='final', ref0=0, ref=1E7)
 
     # Boundary Constraints
     phase.add_boundary_constraint('y', loc='final', lower=305,
@@ -100,19 +100,19 @@ if __name__ == '__main__':
     # # Setup the driver
     p.driver = om.pyOptSparseDriver()
 
-    p.driver.options['optimizer'] = 'SNOPT'
-    p.driver.opt_settings['Major optimality tolerance'] = 1e-4
-    p.driver.opt_settings['Major feasibility tolerance'] = 1e-6
-    p.driver.opt_settings['Major iterations limit'] = 1000
-    p.driver.opt_settings['Minor iterations limit'] = 100_000_000
-    p.driver.opt_settings['iSumm'] = 6
+    # p.driver.options['optimizer'] = 'SNOPT'
+    # p.driver.opt_settings['Major optimality tolerance'] = 1e-4
+    # p.driver.opt_settings['Major feasibility tolerance'] = 1e-6
+    # p.driver.opt_settings['Major iterations limit'] = 1000
+    # p.driver.opt_settings['Minor iterations limit'] = 100_000_000
+    # p.driver.opt_settings['iSumm'] = 6
 
-    # p.driver.options['optimizer'] = 'IPOPT'
-    # p.driver.opt_settings['max_iter'] = 1000
-    # p.driver.opt_settings['alpha_for_y'] = 'safer-min-dual-infeas'
-    # p.driver.opt_settings['print_level'] = 5
-    # p.driver.opt_settings['nlp_scaling_method'] = 'gradient-based'
-    # p.driver.opt_settings['tol'] = 1.0E-5
+    p.driver.options['optimizer'] = 'IPOPT'
+    p.driver.opt_settings['max_iter'] = 1000
+    p.driver.opt_settings['alpha_for_y'] = 'safer-min-dual-infeas'
+    p.driver.opt_settings['print_level'] = 5
+    p.driver.opt_settings['nlp_scaling_method'] = 'gradient-based'
+    p.driver.opt_settings['tol'] = 1.0E-6
 
     p.driver.declare_coloring(tol=1.0E-8)
 
@@ -134,6 +134,6 @@ if __name__ == '__main__':
                                                               nodes='control_input'))
 
     p.set_val('traj.phase0.controls:power', 200000.0)
-    p.set_val('traj.phase0.controls:theta', phase.interpolate(ys=[0, np.radians(85)], nodes='control_input'))
+    p.set_val('traj.phase0.controls:theta', phase.interpolate(ys=[0.001, np.radians(85)], nodes='control_input'))
 
     dm.run_problem(p, run_driver=True, simulate=True)
