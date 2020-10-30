@@ -92,7 +92,12 @@ power_cp = [207161.23632379, 239090.09259429, 228846.07476655, 228171.35928472,
 
 class EulerIntegration(om.ExplicitComponent): 
 
+    def initialize(self): 
+        self.options.declare('num_steps', types=int)
+
     def setup(self): 
+
+        num_steps = self.options['num_steps']
 
         # Define the OM Problem
         sub_prob = om.Problem()
@@ -109,8 +114,10 @@ class EulerIntegration(om.ExplicitComponent):
                                                                        training_data_gradients=True), 
                                             )
         controls.add_input('norm_time', 0.0, training_data=time_cp)
-        controls.add_output('theta', 0.0, training_data=theta_cp)
-        controls.add_output('power', 0.0, training_data=power_cp)
+        # controls.add_output('theta', 0.0, training_data=theta_cp)
+        # controls.add_output('power', 0.0, training_data=power_cp)
+        controls.add_output('theta', 0.0, training_data=np.ones(num_cp))
+        controls.add_output('power', 0.0, training_data=np.ones(num_cp))
         sub_prob.model.connect('time_calc.norm_time', 'controls.norm_time')
 
         sub_prob.model.add_subsystem('ode', Dynamics(input_dict=input_dict, num_nodes=1))
@@ -121,8 +128,7 @@ class EulerIntegration(om.ExplicitComponent):
         sub_prob.setup()
         self.sub_prob = sub_prob
 
-        self.add_input('t_final', val=30., units='s')
-        self.add_input('time', val=0., units='s')
+        self.add_input('flight_time', val=30., units='s')
         self.add_input('theta_cp', val=np.ones(num_cp), units='rad')
         self.add_input('power_cp', val=np.ones(num_cp), units='W')
 
@@ -132,19 +138,29 @@ class EulerIntegration(om.ExplicitComponent):
         self.add_output('vy', shape=num_steps, units='m/s')
         self.add_output('energy', shape=num_steps, units='J')
         self.add_output('times', shape=num_steps, units='s')
+        
+        self.add_output('u_inf_prop', shape=num_steps, units='m/s')
 
+
+        self.declare_partials('*', '*', method='fd')
 
     def compute(self, inputs, outputs):
+        num_steps = self.options['num_steps']
 
         sub_prob = self.sub_prob
 
-        # set the initial condition 
+        sub_prob['controls.theta_train'] = inputs['theta_cp']
+        sub_prob['controls.power_train'] = inputs['power_cp']
+
+        # hard coded initial conditions
         outputs['x'][0] = 0
         outputs['y'][0] = 0.01
         outputs['vx'][0] = 0
         outputs['vy'][0] = .01
         outputs['energy'][0] = 0
         outputs['times'][0] = 0
+
+        outputs['u_inf_prop'][0] = 1e-2
 
         dt = t_final/num_steps
 
@@ -153,7 +169,7 @@ class EulerIntegration(om.ExplicitComponent):
 
             # update the time, so the controls outputs change
             sub_prob['time_calc.time'] = outputs['times'][i].copy()
-            sub_prob['time_calc.t_final'] = inputs['t_final']
+            sub_prob['time_calc.t_final'] = inputs['flight_time']
 
             # the ODE only depends on these two states
             sub_prob['ode.vx'] = outputs['vx'][i]
@@ -174,6 +190,42 @@ class EulerIntegration(om.ExplicitComponent):
             outputs['energy'][i+1] = outputs['energy'][i] + denergy_dt*dt
 
             outputs['times'][i+1] = outputs['times'][i]+dt
+            
+
+            outputs['u_inf_prop'][i+1] = sub_prob['ode.u_inf_prop'][0]
+
+
+
+
+    # def compute_partials(self, inputs, J): 
+    #     num_steps = self.options['num_steps']
+
+    #     # the partials for this component in the most efficient way possible
+    #     sub_prob = self.sub_prob
+
+
+    #     # first we have to run forwards through the time loop once to "tape" it
+    #     # note: if you used reverse mode AD, it would do this in the background
+
+    #     #create a dummy data structure to hold the taped outputs
+    #     outputs={'x':np.zeros(num_steps), 
+    #              'y':np.zeros(num_steps), 
+    #              'vx':np.zeros(num_steps), 
+    #              'vy':np.zeros(num_steps), 
+    #              'energy':np.zeros(num_steps), 
+    #              'times':np.zeros(num_steps), 
+    #             }
+
+    #     self.compute(inputs, outputs)
+
+
+    #     dx_dtimes
+
+    #     # loop backwards through the integration loop to compute 
+
+    #     for i in reversed(range(num_steps-1)): 
+
+    #         J[]
 
 
 if __name__ == "__main__": 
@@ -184,18 +236,56 @@ if __name__ == "__main__":
 
 
     p = om.Problem()
-    p.model = EulerIntegration()
+
+    
+    
+    p.model.add_subsystem('euler', EulerIntegration(num_steps=num_steps))
+
+    ks = p.model.add_subsystem('ks_y', om.KSComp(width=num_steps, rho=100, units='m'))
+    p.model.connect('euler.y', 'ks_y.g')
+    ks = p.model.add_subsystem('ks_u_inf_prop', om.KSComp(width=num_steps, lower_flag=True, rho=100, units='m/s'))
+    p.model.connect('euler.u_inf_prop', 'ks_u_inf_prop.g')
+
+    
+    # Options for the SNOPT optimizer
+    p.driver = om.pyOptSparseDriver()
+    p.driver.add_recorder(om.SqliteRecorder("cases.sql"))
+    p.driver.options['optimizer'] = "SNOPT"
+    p.driver.opt_settings['Major optimality tolerance'] = 1e-8
+    p.driver.opt_settings['Major feasibility tolerance'] = 1e-8
+    p.driver.opt_settings['Major iterations limit'] = 400
+
+
+    p.model.add_design_var('euler.power_cp', lower = 1e3, upper = 311000, scaler=5e-6)
+    p.model.add_design_var('euler.theta_cp', lower = 0., upper = 3*np.pi/4, scaler=1.2)
+    p.model.add_design_var('euler.flight_time', lower = 5., upper = 60., scaler = 3e-2)
+
+    p.model.add_objective('euler.energy', scaler = 2e-7, index=-1)
+
+    # CONSTRAINTS
+    y_low = np.zeros(num_steps)
+    y_low[-1] = 305
+    p.model.add_constraint('euler.y', lower=305, scaler = 3e-3, indices=[-1]) # Constraint for the final vertical displacement
+    p.model.add_constraint('euler.x', equals=900, scaler = 3e-3, indices=[-1]) # Constraint for the final horizontal displacement
+    p.model.add_constraint('ks_y.KS', upper=0.) # Constraint for the minimum vertical displacement
+    p.model.add_constraint('ks_u_inf_prop.KS', upper=-1e-6) # Constraint for the inflow velocity for the propeller
+    p.model.add_constraint('euler.vx', equals=67., scaler = 2e-2, indices=[-1]) # Constraint for the final horizontal speed
+    # if input_arg_2 == 'ns': # stall constraints
+    #     p.model.add_constraint('aoa_max', upper=15. / 180 * np.pi, scaler = 4.)
+    #     p.model.add_constraint('aoa_min', lower=-15. / 180 * np.pi, scaler = 4.)
 
     p.setup()
 
-    p['theta_cp'] = theta_cp
-    p['power_cp'] = power_cp
+    # set some initial guesses
+    p['euler.theta_cp'] = theta_cp
+    p['euler.power_cp'] = power_cp
 
-    p.run_model()
+    p.run_driver()
+    # p.run_model()
 
-    fig, ax = plt.subplots()
-    ax.plot(p['x'], p['y'])
-    plt.show()
+    # fig, ax = plt.subplots()
+    # ax.plot(p['euler.x'], p['euler.y'])
+    # plt.show()
 
 
 
