@@ -1,7 +1,6 @@
 import sys
 
 sys.path.append("../ode")
-# since this repo is not a real python package, we have to use this approach to being able to import stuff
 
 import numpy as np
 from scipy.interpolate import interp1d
@@ -64,11 +63,7 @@ input_dict = {'T_guess': 9.8 * 725 * 1.2,  # initial thrust guess
               'n_props': num_props  # number of propellers
               }
 
-##########################################################
-# final optimized solution from Shamsheer's original code
-##########################################################
-
-# make some splines to define the time history 
+# make some splines to define the time history
 
 t_final = 28.36866175
 # using the sine_distribution helper from the SplineComp docs
@@ -86,34 +81,26 @@ power_cp = [207161.23632379, 239090.09259429, 228846.07476655, 228171.35928472,
             239606.77670727, 277307.47563171, 225369.8825676, 293871.23097611]
 
 
-class EulerIntegration(om.ExplicitComponent):
+class RK4Integration(om.ExplicitComponent):
 
     def setup(self):
-        # Define the OM Problem
         sub_prob = om.Problem()
-
-        # this is necessary to match the way Shamsheer set up the controls on his original problem
-        # it allows you to scale the total time, without changing the training points of the spline
         sub_prob.model.add_subsystem('time_calc', om.ExecComp('norm_time=time/t_final',
                                                               time={'units': 's'},
                                                               t_final={'units': 's'}))
-
-        # using MetaModelStructured instead of SplineComp because it will let us very the predicted time
-        controls = sub_prob.model.add_subsystem('controls',
-                                                om.MetaModelStructuredComp(method='scipy_cubic',
-                                                                           training_data_gradients=True),
-                                                )
+        controls = sub_prob.model.add_subsystem('controls', om.MetaModelStructuredComp(method='scipy_cubic',
+                                                                                       training_data_gradients=True))
         controls.add_input('norm_time', 0.0, training_data=time_cp)
         controls.add_output('theta', 0.0, training_data=theta_cp)
         controls.add_output('power', 0.0, training_data=power_cp)
         sub_prob.model.connect('time_calc.norm_time', 'controls.norm_time')
 
         sub_prob.model.add_subsystem('ode', Dynamics(input_dict=input_dict, num_nodes=1))
-
         sub_prob.model.connect('controls.theta', 'ode.theta')
         sub_prob.model.connect('controls.power', 'ode.power')
 
         sub_prob.setup()
+
         self.sub_prob = sub_prob
 
         self.add_input('t_final', val=30., units='s')
@@ -128,10 +115,22 @@ class EulerIntegration(om.ExplicitComponent):
         self.add_output('energy', shape=num_steps, units='J')
         self.add_output('times', shape=num_steps, units='s')
 
+    def rk4_weight(self, t, vx, vy):
+        self.sub_prob['time_calc.time'] = t
+        self.sub_prob['ode.vx'] = vx
+        self.sub_prob['ode.vy'] = vy
+        self.sub_prob.run_model()
+        dx_dt = self.sub_prob['ode.x_dot'][0]
+        dy_dt = self.sub_prob['ode.y_dot'][0]
+        dvx_dt = self.sub_prob['ode.a_x'][0]
+        dvy_dt = self.sub_prob['ode.a_y'][0]
+        denergy_dt = self.sub_prob['ode.energy_dot'][0]
+        f = np.array([dx_dt, dy_dt, dvx_dt, dvy_dt, denergy_dt])
+        return f
+
     def compute(self, inputs, outputs):
         sub_prob = self.sub_prob
 
-        # set the initial condition 
         outputs['x'][0] = 0
         outputs['y'][0] = 0.01
         outputs['vx'][0] = 0
@@ -142,28 +141,24 @@ class EulerIntegration(om.ExplicitComponent):
         dt = t_final / num_steps
 
         sub_prob['time_calc.t_final'] = inputs['t_final']
-        # DIY euler integration
         for i in range(num_steps - 1):
-            # update the time, so the controls outputs change
             sub_prob['time_calc.time'] = outputs['times'][i].copy()
 
-            # the ODE only depends on these two states
-            sub_prob['ode.vx'] = outputs['vx'][i]
-            sub_prob['ode.vy'] = outputs['vy'][i]
+            k1 = dt * self.rk4_weight(sub_prob['time_calc.time'], outputs['vx'][i], outputs['vy'][i])
+            k2 = dt * self.rk4_weight(sub_prob['time_calc.time'] + 0.5 * dt, outputs['vx'][i] + 0.5 * k1[2],
+                                      outputs['vy'][i] + 0.5 * k1[3])
 
-            sub_prob.run_model()
+            k3 = dt * self.rk4_weight(sub_prob['time_calc.time'] + 0.5 * dt, outputs['vx'][i] + 0.5 * k2[2],
+                                      outputs['vy'][i] + 0.5 * k2[3])
 
-            dx_dt = sub_prob['ode.x_dot'][0]
-            dy_dt = sub_prob['ode.y_dot'][0]
-            dvx_dt = sub_prob['ode.a_x'][0]
-            dvy_dt = sub_prob['ode.a_y'][0]
-            denergy_dt = sub_prob['ode.energy_dot'][0]
+            k4 = dt * self.rk4_weight(sub_prob['time_calc.time'] + dt, outputs['vx'][i] + k3[2],
+                                      outputs['vy'][i] + k3[3])
 
-            outputs['x'][i + 1] = outputs['x'][i] + dx_dt * dt
-            outputs['y'][i + 1] = outputs['y'][i] + dy_dt * dt
-            outputs['vx'][i + 1] = outputs['vx'][i] + dvx_dt * dt
-            outputs['vy'][i + 1] = outputs['vy'][i] + dvy_dt * dt
-            outputs['energy'][i + 1] = outputs['energy'][i] + denergy_dt * dt
+            outputs['x'][i + 1] = outputs['x'][i] + k1[0]/6 + k2[0]/3 + k3[0]/3 + k4[0]/6
+            outputs['y'][i + 1] = outputs['y'][i] + k1[1]/6 + k2[1]/3 + k3[1]/3 + k4[1]/6
+            outputs['vx'][i + 1] = outputs['vx'][i] + k1[2]/6 + k2[2]/3 + k3[2]/3 + k4[2]/6
+            outputs['vy'][i + 1] = outputs['vy'][i] + k1[3]/6 + k2[3]/3 + k3[3]/3 + k4[3]/6
+            outputs['energy'][i + 1] = outputs['energy'][i] + k1[4]/6 + k2[4]/3 + k3[4]/3 + k4[4]/6
 
             outputs['times'][i + 1] = outputs['times'][i] + dt
 
@@ -172,7 +167,7 @@ if __name__ == "__main__":
     import matplotlib.pylab as plt
 
     p = om.Problem()
-    p.model = EulerIntegration()
+    p.model = RK4Integration()
 
     p.setup()
 
