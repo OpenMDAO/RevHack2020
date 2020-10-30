@@ -629,5 +629,210 @@ def CDfunc(angle, AR, e, alpha_stall, coeffs, a0, t_over_c):
     CD_array = np.vstack([-CD2, -CD4]).T
     fmax = np.max(CD_array, axis=1)
     CD4 = -(fmax + 1 / ks_rho * np.log(np.sum(np.exp(ks_rho * (CD_array - fmax[:, np.newaxis])))))
+    
+    return CD4
+```
 
+## Aero
+
+The original problem uses a `change` method to increment the state vector using Euler propagation.
+That `change` method is where the aerodynamic forces were accumulated.
+Since our ODE is no longer actually propagating the states, but just returning their rates, we'll break those calculations out into the `aero` method.
+
+```python
+def aero(atov, v_inf, theta, T, alpha_stall, CD0, AR, e, rho, S, m, a0, t_over_c, coeffs, v_i, v_factor, Normal_F):
+    aoa = atov - theta
+    v_chorwise = v_inf * np.cos(aoa)
+    v_normal = v_inf * np.sin(aoa)
+
+    v_chorwise += v_i * v_factor
+    v_blown = (v_chorwise ** 2 + v_normal ** 2) ** 0.5
+    aoa_blown = cs_atan2(v_normal, v_chorwise)
+
+    CL = CLfunc(aoa_blown, alpha_stall, AR, e, a0, t_over_c)
+    CD = CDfunc(aoa_blown, AR, e, alpha_stall, coeffs, a0, t_over_c)
+
+    # compute lift and drag forces
+    L = 0.5 * rho * v_blown ** 2 * CL * S
+    D_wings = 0.5 * rho * v_blown ** 2 * CD * S
+    D_fuse = 0.5 * rho * v_inf ** 2 * CD0 * S
+
+    return CL, CD, aoa_blown, L, D_wings, D_fuse, aoa_blown
+```
+
+## The Dynamics Component
+
+Finally we create the new Dynamics component.
+The key differences are as follows:
+
+* In the original implementation, this component performed euler integration and provided the final values of the states as outputs.
+* This version is vectorized, it computes all values of the state rates throughout the presumed trajectory simultaneously and return the entire history.
+
+* In the original version, auxiliary outputs were saved in attributes of the model.
+* In this version, the auxiliary outputs are provided as outputs.
+
+* Variables to be path constrained used a K-S function and returned the K-S filtered extrema to be constrained.
+* Since the component no longer sees the entire time history, we output auxiliary variables and use Dymos path constraints to bound them.
+
+```python
+class Dynamics(om.ExplicitComponent):
+    """
+    This is the OpenMDAO component that takes the design variables and computes
+    the objective function and other quantities of interest.
+
+    Parameters
+    ----------
+    powers : array
+        Electrical power distribution as a function of time
+    thetas : array
+        Wing-angle-to-vertical distribution as a function of time
+    flight_time : float
+        Duration of flight
+
+    Returns
+    -------
+    x_dot : float
+        Final horizontal speed
+    y_dot : float
+        Final vertical speed
+    x : float
+        Final horizontal position
+    y : float
+        Final vertical position
+    y_min : float
+        Minimum vertical displacement
+    u_prop_min : float
+        Minimum propeller freestream inflow velocity
+    energy : float
+        Electrical energy consumed
+    aoa_max : float
+        Maximum effective angle of attack
+    aoa_min : float
+        Minimum effective angle of attack
+    acc_max : float
+        Maximum acceleration magnitude
+    """
+
+    def initialize(self):
+        # declare the input dict provided in the run script
+        self.options.declare('input_dict', types=dict)
+        self.options.declare('num_nodes', types=(int,), default=1)
+
+    def setup(self):
+        input_dict = self.options['input_dict']
+
+        # # give variable names to user-specified values from input dict
+        self.A_disk = input_dict['A_disk']  # total propeller disk area
+        self.T_guess = input_dict['T_guess']  # initial thrust guess
+        self.alpha_stall = input_dict['alpha_stall']  # wing stall angle
+        self.CD0 = input_dict['CD0']  # coefficient of drag of the fuselage, gear, etc.
+        self.AR = input_dict['AR']  # aspect ratio
+        self.e = input_dict['e']  # span efficiency factor of each wing
+        self.rho = input_dict['rho']  # air density
+        self.S = input_dict['S']  # total wing reference area
+        self.m = input_dict['m']  # mass of aircraft
+        self.a0 = input_dict['a0']  # airfoil lift-curve slope
+        self.t_over_c = input_dict['t_over_c']  # airfoil thickness-to-chord ratio
+        self.v_factor = input_dict['induced_velocity_factor']  # induced-velocity factor
+        self.stall_option = input_dict[
+            'stall_option']  # stall option: 's' allows stall, 'ns' does not
+        self.R = input_dict['R']  # propeller radius
+        self.solidity = input_dict['solidity']  # propeller solidity
+        self.omega = input_dict['omega']  # propeller angular speed
+        self.prop_CD0 = input_dict['prop_CD0']  # CD0 for propeller profile power
+        self.k_elec = input_dict['k_elec']  # factor for mechanical and electrical losses
+        self.k_ind = input_dict['k_ind']  # factor for induced losses
+        self.nB = input_dict['nB']  # number of blades per propeller
+        self.bc = input_dict['bc']  # representative blade chord
+        self.n_props = input_dict['n_props']  # number of propellers
+
+        self.quartic_poly_coeffs, pts = give_curve_fit_coeffs(self.a0, self.AR, self.e)
+
+        # openmdao inputs to the component
+        nn = self.options['num_nodes']
+        self.add_input('power', val=np.ones(nn))
+        self.add_input('theta', val=np.ones(nn))
+        self.add_input('vx', val=np.ones(nn))
+        self.add_input('vy', val=np.ones(nn))
+
+        # component outputs for the state rates
+        self.add_output('x_dot', val=np.ones(nn))
+        self.add_output('y_dot', val=np.ones(nn))
+        self.add_output('a_x', val=np.ones(nn))
+        self.add_output('a_y', val=np.ones(nn))
+        self.add_output('energy_dot', val=np.ones(nn))
+
+        # component outputs for auxiliary outputs we may want
+        # to constrain or view in timeseries
+        self.add_output('acc', val=np.ones(nn))
+        self.add_output('CL', val=np.ones(nn))
+        self.add_output('CD', val=np.ones(nn))
+        self.add_output('L_wings', val=np.ones(nn))
+        self.add_output('D_wings', val=np.ones(nn))
+        self.add_output('atov', val=np.ones(nn))
+        self.add_output('D_fuse', val=np.ones(nn))        
+        self.add_output('aoa', val=np.ones(nn))
+        self.add_output('thrust', val=np.ones(nn))
+        self.add_output('vi', val=np.ones(nn))
+
+        # use complex step for partial derivatives
+        self.declare_partials('*', '*', method='fd')
+
+        # Partial derivative coloring
+        # self.declare_coloring(wrt=['*'], method='cs', tol=1.0E-12, num_full_jacs=5,
+        #                       show_summary=True, show_sparsity=True, min_improve_pct=10.)
+
+    def compute(self, inputs, outputs):
+
+        thrust = self.T_guess * np.ones(self.options['num_nodes'])
+        power = inputs['power']
+        theta = inputs['theta']
+
+        vx = inputs['vx']
+        vy = inputs['vy']
+
+        # the freestream angle relative to the vertical is
+        atov = cs_atan2(vx, vy)
+
+        # the freestream speed is
+        v_inf = (vx ** 2 + vy ** 2) ** 0.5
+
+        u_inf_prop = v_inf * np.cos(atov - theta)
+        u_parallel = v_inf * np.sin(atov - theta)
+
+        mu = u_parallel / (self.omega * self.R)
+        CP_profile = self.solidity * self.prop_CD0 / 8. * (1 + 4.6 * mu ** 2)
+        P_disk = self.k_elec * power - CP_profile * (self.rho * self.A_disk * (self.omega * self.R) ** 3)
+
+        thrust, vi = Thrust(u_inf_prop, P_disk, self.A_disk, thrust, self.rho, self.k_ind)
+
+        Normal_F = Normal_force(v_inf, self.R, thrust / self.n_props, atov - theta, self.rho, self.nB, self.bc)
+
+        CL, CD, aoa_blown, L, D_wings, D_fuse, aoa_blown = aero(atov, v_inf, theta, thrust, self.alpha_stall,
+                                                                self.CD0, self.AR, self.e, self.rho, self.S,
+                                                                self.m, self.a0, self.t_over_c,
+                                                                self.quartic_poly_coeffs, vi, self.v_factor,
+                                                                self.n_props * Normal_F)
+
+        # compute horizontal and vertical changes in velocity
+        outputs['atov'] = atov
+        outputs['x_dot'] = vx
+        outputs['y_dot'] = vy
+        outputs['a_x'] = (thrust * np.sin(theta) - D_fuse * np.sin(atov) -
+                          D_wings * np.sin(theta + aoa_blown) - L * np.cos(theta + aoa_blown) -
+                          self.n_props * Normal_F * np.cos(theta)) / self.m
+        outputs['a_y'] = (thrust * np.cos(theta) - D_fuse * np.cos(atov) -
+                          D_wings * np.cos(theta + aoa_blown) + L * np.sin(theta + aoa_blown)
+                          + self.n_props * Normal_F * np.sin(theta) - self.m * 9.81) / self.m
+        outputs['energy_dot'] = power
+
+        outputs['acc'] = np.sqrt(outputs['a_x']**2 + outputs['a_y']**2) / 9.81
+        outputs['CL'] = CL
+        outputs['CD'] = CD
+        outputs['L_wings'] = L
+        outputs['D_wings'] = D_wings
+        outputs['D_fuse'] = D_fuse
+        outputs['aoa'] = aoa_blown
+        outputs['thrust'] = thrust
+        outputs['vi'] = vi
 ```

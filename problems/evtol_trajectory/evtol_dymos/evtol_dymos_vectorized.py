@@ -6,7 +6,7 @@ import sys
 
 sys.path.insert(0, "../ode")
 
-from evtol_dynamics_comp import Dynamics
+from evtol_dynamics_comp_vectorized import Dynamics as DynamicsVectorized
 
 import verify_data
 
@@ -58,7 +58,7 @@ if __name__ == '__main__':
 
     phase = dm.Phase(transcription=dm.GaussLobatto(num_segments=10, order=3, solve_segments=False,
                                                    compressed=False),
-                     ode_class=Dynamics,
+                     ode_class=DynamicsVectorized,
                      ode_init_kwargs={'input_dict': input_dict})
 
     traj.add_phase('phase0', phase)
@@ -100,19 +100,19 @@ if __name__ == '__main__':
     # # Setup the driver
     p.driver = om.pyOptSparseDriver()
 
-    p.driver.options['optimizer'] = 'SNOPT'
-    p.driver.opt_settings['Major optimality tolerance'] = 1e-4
-    p.driver.opt_settings['Major feasibility tolerance'] = 1e-6
-    p.driver.opt_settings['Major iterations limit'] = 1000
-    p.driver.opt_settings['Minor iterations limit'] = 100_000_000
-    p.driver.opt_settings['iSumm'] = 6
+    # p.driver.options['optimizer'] = 'SNOPT'
+    # p.driver.opt_settings['Major optimality tolerance'] = 1e-4
+    # p.driver.opt_settings['Major feasibility tolerance'] = 1e-6
+    # p.driver.opt_settings['Major iterations limit'] = 1000
+    # p.driver.opt_settings['Minor iterations limit'] = 100_000_000
+    # p.driver.opt_settings['iSumm'] = 6
 
-    # p.driver.options['optimizer'] = 'IPOPT'
-    # p.driver.opt_settings['max_iter'] = 1000
-    # p.driver.opt_settings['alpha_for_y'] = 'safer-min-dual-infeas'
-    # p.driver.opt_settings['print_level'] = 5
-    # p.driver.opt_settings['nlp_scaling_method'] = 'gradient-based'
-    # p.driver.opt_settings['tol'] = 5.0E-5
+    p.driver.options['optimizer'] = 'IPOPT'
+    p.driver.opt_settings['max_iter'] = 1000
+    p.driver.opt_settings['alpha_for_y'] = 'safer-min-dual-infeas'
+    p.driver.opt_settings['print_level'] = 5
+    p.driver.opt_settings['nlp_scaling_method'] = 'gradient-based'
+    p.driver.opt_settings['tol'] = 5.0E-5
 
     p.driver.declare_coloring(tol=1.0E-8)
 
