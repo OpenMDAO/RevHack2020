@@ -238,14 +238,6 @@ def CLfunc(angle, alpha_stall, AR, e, a0, t_over_c):
         alpha_stall) / np.cos(alpha_stall) ** 2
     CL2 = A1 * np.sin(2 * angle) + A2 * np.cos(angle) ** 2 / np.sin(angle)
 
-    """
-    0.2270590416478
-    print(CLa, CL_stall, CD_max, CL1, A1, A2, CL2, CL_array, fmax)
-    4.385880808232317 1.1482209105552592 1.244 0.9958538930987082 0.622 0.23224626649810257 1.2522584068822282 [-0.99585389 -1.25225841] -0.9958538930987082
-    log
-    2.7054888859353234e-06
-    """
-
     CL_array = np.vstack((-CL1, -CL2)).T
     CL_array_neg = np.vstack((CL1, CL2)).T
 
@@ -343,16 +335,8 @@ def aero(atov, v_inf, theta, T, alpha_stall, CD0, AR, e, rho, S, m, a0, t_over_c
     v_blown = (v_chorwise ** 2 + v_normal ** 2) ** 0.5
     aoa_blown = cs_atan2(v_normal, v_chorwise)
 
-    # with np.printoptions(linewidth=1000000, threshold=1000000, precision=16):
-    #     print('aoa_blown, alpha_stall, AR, e, a0, t_over_c')
-    #     print(np.vstack([aoa_blown, alpha_stall * np.ones_like(aoa_blown), AR * np.ones_like(aoa_blown), e * np.ones_like(aoa_blown), a0 * np.ones_like(aoa_blown), t_over_c * np.ones_like(aoa_blown)]).T)
-
     CL = CLfunc(aoa_blown, alpha_stall, AR, e, a0, t_over_c)
     CD = CDfunc(aoa_blown, AR, e, alpha_stall, coeffs, a0, t_over_c)
-
-    # with np.printoptions(linewidth=1000000, threshold=1000000):
-    #     print('CL, CD')
-    #     print(np.vstack([CL, CD]).T)
 
     # compute lift and drag forces
     L = 0.5 * rho * v_blown ** 2 * CL * S
@@ -423,7 +407,6 @@ class Dynamics(om.ExplicitComponent):
         self.v_factor = input_dict['induced_velocity_factor']  # induced-velocity factor
         self.stall_option = input_dict[
             'stall_option']  # stall option: 's' allows stall, 'ns' does not
-        # self.num_steps = input_dict['num_steps']  # number of time steps
         self.R = input_dict['R']  # propeller radius
         self.solidity = input_dict['solidity']  # propeller solidity
         self.omega = input_dict['omega']  # propeller angular speed
@@ -443,13 +426,15 @@ class Dynamics(om.ExplicitComponent):
         self.add_input('vx', val=np.ones(nn))
         self.add_input('vy', val=np.ones(nn))
 
-        # openmdao outputs from the component
+        # component outputs for the state rates
         self.add_output('x_dot', val=np.ones(nn))
         self.add_output('y_dot', val=np.ones(nn))
         self.add_output('a_x', val=np.ones(nn))
         self.add_output('a_y', val=np.ones(nn))
         self.add_output('energy_dot', val=np.ones(nn))
 
+        # component outputs for auxiliary outputs we may want
+        # to constrain or view in timeseries
         self.add_output('acc', val=np.ones(nn))
         self.add_output('CL', val=np.ones(nn))
         self.add_output('CD', val=np.ones(nn))
@@ -461,24 +446,16 @@ class Dynamics(om.ExplicitComponent):
         self.add_output('thrust', val=np.ones(nn))
         self.add_output('vi', val=np.ones(nn))
 
-
         # use complex step for partial derivatives
-        self.declare_partials('*', '*', method='fd')
+        self.declare_partials('*', '*', method='cs')
 
-        # Partial derivative coloring
-        # self.declare_coloring(wrt=['*'], method='cs', tol=1.0E-12, num_full_jacs=5,
+        # # Partial derivative coloring
+        # self.declare_coloring(wrt=['*'], method='cs', tol=1.0E-15, num_full_jacs=5,
         #                       show_summary=True, show_sparsity=True, min_improve_pct=10.)
 
     def compute(self, inputs, outputs):
 
-        # self.x_dots[0] = self.x_dot_initial
-        # self.y_dots[0] = self.y_dot_initial
         thrust = self.T_guess * np.ones(self.options['num_nodes'])
-        # self.atov[0] = cs_atan2(self.x_dots[0], self.y_dots[0])
-        # self.energy[0] = 0.
-        # self.y[0] = self.y_initial
-
-        # self.flight_time = inputs['flight_time']
         power = inputs['power']
         theta = inputs['theta']
 
@@ -512,8 +489,12 @@ class Dynamics(om.ExplicitComponent):
         outputs['atov'] = atov
         outputs['x_dot'] = vx
         outputs['y_dot'] = vy
-        outputs['a_x'] = (thrust * np.sin(theta) - D_fuse * np.sin(atov) - D_wings * np.sin(theta + aoa_blown) - L * np.cos(theta + aoa_blown) - self.n_props * Normal_F * np.cos(theta)) / self.m
-        outputs['a_y'] = (thrust * np.cos(theta) - D_fuse * np.cos(atov) - D_wings * np.cos(theta + aoa_blown) + L * np.sin(theta + aoa_blown) + self.n_props * Normal_F * np.sin(theta) - self.m * 9.81) / self.m
+        outputs['a_x'] = (thrust * np.sin(theta) - D_fuse * np.sin(atov) -
+                          D_wings * np.sin(theta + aoa_blown) - L * np.cos(theta + aoa_blown) -
+                          self.n_props * Normal_F * np.cos(theta)) / self.m
+        outputs['a_y'] = (thrust * np.cos(theta) - D_fuse * np.cos(atov) -
+                          D_wings * np.cos(theta + aoa_blown) + L * np.sin(theta + aoa_blown)
+                          + self.n_props * Normal_F * np.sin(theta) - self.m * 9.81) / self.m
         outputs['energy_dot'] = power
 
         outputs['acc'] = np.sqrt(outputs['a_x']**2 + outputs['a_y']**2) / 9.81
