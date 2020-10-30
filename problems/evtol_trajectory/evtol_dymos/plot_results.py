@@ -11,7 +11,7 @@ import verify_data
 mpl.rcParams['lines.markersize'] = 4
 
 sol = om.CaseReader('dymos_solution.db').get_case('final')
-sim = om.CaseReader('dymos_simulation.db').get_case(-1)
+sim = om.CaseReader('dymos_simulation.db').get_case('final')
 
 time = sol.get_val('traj.phase0.timeseries.time')
 power = sol.get_val('traj.phase0.timeseries.controls:power')
