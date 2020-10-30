@@ -50,28 +50,26 @@ class ComputePitchAnglesUsingSubProblem(om.ExplicitComponent):
         self.add_output("powers", np.zeros(size))
         self.add_output("total_power")
 
+        self._problem = prob = om.Problem()
+        prob.model.add_subsystem(
+            "compute_power",
+            ComputePower(),
+            promotes=["*"],
+        )
+
+        prob.driver = om.ScipyOptimizeDriver()
+        prob.driver.options["optimizer"] = "COBYLA"
+        prob.model.approx_totals(method="fd")
+
+        prob.model.add_design_var("pitch_angle", lower=-15.0, upper=15.0)
+        prob.model.add_constraint("power_constraint", lower=0.0)
+        prob.model.add_objective("power")
+
+        prob.setup()
+
     def compute(self, inputs, outputs):
         P_rated = self.options["P_rated"]
         drag_modifier = inputs["drag_modifier"]
-
-        if self._problem is None:
-            prob = om.Problem()
-            self._problem = prob
-            prob.model.add_subsystem(
-                "compute_power",
-                ComputePower(),
-                promotes=["*"],
-            )
-
-            prob.driver = om.ScipyOptimizeDriver()
-            prob.driver.options["optimizer"] = "COBYLA"
-            prob.model.approx_totals(method="fd")
-
-            prob.model.add_design_var("pitch_angle", lower=-15.0, upper=15.0)
-            prob.model.add_constraint("power_constraint", lower=0.0)
-            prob.model.add_objective("power")
-
-            prob.setup()
 
         prob = self._problem
         prob.set_val("drag_modifier", drag_modifier)
