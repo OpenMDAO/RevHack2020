@@ -86,9 +86,6 @@ class VerifyTest(unittest.TestCase):
         assert_near_equal(prob['x_dot'], verify_data.x_dot[:-1], tol)
         assert_near_equal(prob['y_dot'], verify_data.y_dot[:-1], tol)
 
-        assert_near_equal(prob['a_x'], verify_data.a_x, tol)
-        assert_near_equal(prob['a_y'], verify_data.a_y, tol)
-
         assert_near_equal(prob['thrust'], verify_data.thrusts[:-1], tol)
         assert_near_equal(prob['atov'], verify_data.atov[1:], tol)
 
@@ -98,13 +95,21 @@ class VerifyTest(unittest.TestCase):
         assert_near_equal(prob['L_wings'], verify_data.L_wings, tol)
         assert_near_equal(prob['D_wings'], verify_data.D_wings, tol)
 
+        assert_near_equal(prob['a_y'], verify_data.a_y, tol)
+        assert_near_equal(prob['a_x'], verify_data.a_x, tol)
+
     def test_dynamics(self):
 
         prob = self.make_problem(comp_class=Dynamics)
 
         self.assert_results(prob)
 
-    
+    def test_dynamics_vectorized(self):
+
+        prob = self.make_problem(comp_class=DynamicsVectorized)
+
+        self.assert_results(prob)
+
 
 
 

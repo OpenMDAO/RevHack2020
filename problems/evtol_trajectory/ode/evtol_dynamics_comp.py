@@ -493,9 +493,8 @@ class Dynamics(ExplicitComponent):
         self.a0 = input_dict['a0']  # airfoil lift-curve slope
         self.t_over_c = input_dict['t_over_c']  # airfoil thickness-to-chord ratio
         self.v_factor = input_dict['induced_velocity_factor']  # induced-velocity factor
-        self.stall_option = input_dict[
-            'stall_option']  # stall option: 's' allows stall, 'ns' does not
-        self.num_steps = input_dict['num_steps']  # number of time steps
+        self.stall_option = input_dict['stall_option']  # stall option: 's' allows stall, 'ns' does not
+        # self.num_steps = input_dict['num_steps']  # number of time steps
         self.R = input_dict['R']  # propeller radius
         self.solidity = input_dict['solidity']  # propeller solidity
         self.omega = input_dict['omega']  # propeller angular speed
