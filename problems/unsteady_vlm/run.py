@@ -163,7 +163,7 @@ for p in range(num_of_angles):
         ###################
 
         prob = om.Problem()
-        prob.model.root = root
+        prob.model = root
         prob.set_solver_print()
 
         # Setup data recording

@@ -326,7 +326,7 @@ class SpatialBeamEIG(om.ExplicitComponent):
         final_t = self.options["final_t"]
 
         self.size = size = 6 * n
-        self.size_eig = size_eig = size - 6
+        self.size_eig = size - 6
 
         self.add_input('v', val=10.)
         self.add_input('span', val=58.7630524)
