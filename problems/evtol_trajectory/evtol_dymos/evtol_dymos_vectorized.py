@@ -56,8 +56,8 @@ if __name__ == '__main__':
     traj = dm.Trajectory()
     p.model.add_subsystem('traj', traj)
 
-    phase = dm.Phase(transcription=dm.GaussLobatto(num_segments=10, order=3, solve_segments=True,
-                                                   compressed=True),
+    phase = dm.Phase(transcription=dm.GaussLobatto(num_segments=10, order=3, solve_segments=False,
+                                                   compressed=False),
                      ode_class=DynamicsVectorized,
                      ode_init_kwargs={'input_dict': input_dict})
 
@@ -112,7 +112,7 @@ if __name__ == '__main__':
     p.driver.opt_settings['alpha_for_y'] = 'safer-min-dual-infeas'
     p.driver.opt_settings['print_level'] = 5
     p.driver.opt_settings['nlp_scaling_method'] = 'gradient-based'
-    p.driver.opt_settings['tol'] = 1.0E-6
+    p.driver.opt_settings['tol'] = 5.0E-5
 
     p.driver.declare_coloring(tol=1.0E-8)
 
