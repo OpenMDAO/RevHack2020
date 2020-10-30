@@ -17,13 +17,13 @@ class SingleStep(om.Group):
         name_spatialbeamstates = 'spatialbeamstates_%d'%t
 
         self.add_subsystem(name_def_mesh,
-                 TransferDisplacements(num_x, num_y, t, fem_origin),
+                 TransferDisplacements(nx=num_x, n=num_y, t=t, fem_origin=fem_origin),
                  promotes=['*'])
         self.add_subsystem(name_vlmstates,
                  UVLMStates(num_x, num_y, num_w, t),
                  promotes=['*'])
         self.add_subsystem(name_loads,
-                 TransferLoads(num_x, num_y, t, fem_origin),
+                 TransferLoads(nx=num_x, n=num_y, t=t, fem_origin=fem_origin),
                  promotes=['*'])
         self.add_subsystem(name_spatialbeamstates,
                  SpatialBeamStates(num_x, num_y, E, G, mrho, SBEIG, t),
@@ -41,13 +41,13 @@ class SingleAeroStep(om.Group):
         name_spatialbeamstates = 'spatialbeamstates_%d'%t
 
         self.add_subsystem(name_def_mesh,
-              TransferDisplacements(num_x, num_y, t, fem_origin),
+              TransferDisplacements(nx=num_x, n=num_y, t=t, fem_origin=fem_origin),
               promotes=['*'])
         self.add_subsystem(name_vlmstates,
               UVLMStates(num_x, num_y, num_w, t),
               promotes=['*'])
         self.add_subsystem(name_loads,
-              TransferLoads(num_x, num_y, t, fem_origin),
+              TransferLoads(nx=num_x, n=num_y, t=t, fem_origin=fem_origin),
               promotes=['*'])
 
 class SingleStructStep(om.Group):

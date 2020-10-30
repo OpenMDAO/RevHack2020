@@ -227,11 +227,13 @@ class GeometryMesh(om.ExplicitComponent):
     Takes in a half mesh with symmetry plane about the middle and
     outputs a full symmetric mesh. """
 
-    def __init__(self, mesh, num_twist):
-        super(GeometryMesh, self).__init__()
+    def initialize(self):
+        self.options.declare("mesh")
+        self.options.declare("num_twist")
 
-        self.mesh = mesh
-        self.num_twist = num_twist
+    def setup(self):
+        self.mesh = mesh = self.options["mesh"]
+        self.num_twist = num_twist = self.options["num_twist"]
 
         self.new_mesh = numpy.empty(mesh.shape, dtype=complex)
         self.new_mesh[:] = mesh
@@ -244,17 +246,18 @@ class GeometryMesh(om.ExplicitComponent):
         self.add_input('taper', val=1.)
         self.add_output('mesh', val=self.mesh[:, :half+1, :])
 
+    def setup_partials(self):
         self.declare_partials(of='*', wrt='*', method='cs')
 
-    def solve_nonlinear(self, params, unknowns, resids):
+    def compute(self, inputs, outputs):
         jac = get_bspline_mtx(self.num_twist, self.n, self.mesh)
-        h_cp = params['twist']
+        h_cp = inputs['twist']
         h = jac.dot(h_cp)
 
         self.new_mesh[:] = self.mesh
-        stretch(self.new_mesh, params['span'])
-        sweep(self.new_mesh, params['sweep'])
+        stretch(self.new_mesh, inputs['span'])
+        sweep(self.new_mesh, inputs['sweep'])
         rotate(self.new_mesh, h)
-        dihedral(self.new_mesh, params['dihedral'])
-        taper(self.new_mesh, params['taper'])
-        unknowns['mesh'] = self.new_mesh[:, :self.half+1, :]
+        dihedral(self.new_mesh, inputs['dihedral'])
+        taper(self.new_mesh, inputs['taper'])
+        outputs['mesh'] = self.new_mesh[:, :self.half+1, :]

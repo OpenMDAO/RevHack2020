@@ -119,15 +119,16 @@ for p in range(num_of_angles):
                     om.IndepVarComp(i[0], i[1]),
                     promotes=['*'])
         root.add_subsystem('tube',
-                 MaterialsTube(num_y_sym),
+                 MaterialsTube(n=num_y_sym),
                  promotes=['*'])
         root.add_subsystem('mesh',
-                 GeometryMesh(full_wing_mesh, num_twist),
+                 GeometryMesh(mesh=full_wing_mesh, num_twist=num_twist),
                  promotes=['*'])
         root.add_subsystem('matrices',
-                 SpatialBeamMatrices(num_x, num_y_sym, E, G, mrho, fem_origin),
+                 SpatialBeamMatrices(nx=num_x, n=num_y_sym, E=E, G=G, mrho=mrho,
+                                     fem_origin=fem_origin),
                  promotes=['*'])
-        SBEIG = SpatialBeamEIG(num_y_sym, num_dt, final_t)
+        SBEIG = SpatialBeamEIG(n=num_y_sym, num_dt=num_dt, final_t=final_t)
         root.add_subsystem('eig',
                  SBEIG,
                  promotes=['*'])

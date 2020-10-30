@@ -171,8 +171,24 @@ def assemble_system(A, Iy, Iz, mesh, J, E, G, mrho, fem_origin,
 class SpatialBeamMatrices(om.ExplicitComponent):
     """ Computes matrices for dynamic integration """
 
-    def __init__(self, nx, n, E, G, mrho, fem_origin=0.35):
-        super(SpatialBeamMatrices, self).__init__()
+    def initialize(self):
+        self.options.declare("nx")
+        self.options.declare("n")
+        self.options.declare("E")
+        self.options.declare("G")
+        self.options.declare("mrho")
+        self.options.declare("fem_origin")
+
+    def setup(self):
+        nx = self.options["nx"]
+        n = self.options["n"]
+        E = self.options["E"]
+        G = self.options["G"]
+        mrho = self.options["mrho"]
+        if self.options["fem_origin"] is None:
+            fem_origin = 0.35
+        else:
+            fem_origin = self.options["fem_origin"]
 
         self.add_input('zeta', val=0.)
         self.add_input('A', val=numpy.zeros((n - 1)))
@@ -266,11 +282,11 @@ class SpatialBeamMatrices(om.ExplicitComponent):
     def setup_partials(self):
         self.declare_partials('*', '*', method='cs')
 
-    def solve_nonlinear(self, params, unknowns, resids):
+    def compute(self, inputs, outputs):
 
         size = self.size
 
-        assemble_system(params['A'], params['Iy'], params['Iz'], params['mesh'], params['J'],
+        assemble_system(inputs['A'], inputs['Iy'], inputs['Iz'], inputs['mesh'], inputs['J'],
                         self.E, self.G, self.mrho, self.fem_origin,
                         self.elem_IDs, self.x_gl, self.T_elem, self.T,
                         self.S_a, self.S_t, self.S_y, self.S_z,
@@ -279,17 +295,17 @@ class SpatialBeamMatrices(om.ExplicitComponent):
                         self.const2, self.const_yy, self.const_zz,
                         self.mm_a, self.mm_t, self.mm_y, self.mm_z, self.M_elem, self.M_mtx)
 
-        unknowns['M_matrix'] = self.M_mtx
-        unknowns['K_matrix'] = self.K_mtx
+        outputs['M_matrix'] = self.M_mtx
+        outputs['K_matrix'] = self.K_mtx
 
-    # def linearize(self, params, unknowns, resids):
+    # def linearize(self, inputs, outputs, resids):
     #     """ Jacobian for structural matrices """
 
     #     jac = self.alloc_jacobian()
 
-    #     fd_jac = self.complex_step_jacobian(params, unknowns, resids,
-    #                             fd_params=['A','Iy','Iz','J','mesh'],
-    #                             fd_unknowns=['M_matrix', 'K_matrix'],
+    #     fd_jac = self.complex_step_jacobian(inputs, outputs, resids,
+    #                             fd_inputs=['A','Iy','Iz','J','mesh'],
+    #                             fd_outputs=['M_matrix', 'K_matrix'],
     #                             fd_states=[])
 
     #     jac.update(fd_jac)
@@ -299,8 +315,15 @@ class SpatialBeamMatrices(om.ExplicitComponent):
 class SpatialBeamEIG(om.ExplicitComponent):
     """ Computes eigenvalues and eigenvectors. """
 
-    def __init__(self, n, num_dt, final_t):
-        super(SpatialBeamEIG, self).__init__()
+    def initialize(self):
+        self.options.declare("n")
+        self.options.declare("num_dt")
+        self.options.declare("final_t")
+
+    def setup(self):
+        n = self.options["n"]
+        num_dt = self.options["num_dt"]
+        final_t = self.options["final_t"]
 
         self.size = size = 6 * n
         self.size_eig = size_eig = size - 6
@@ -318,30 +341,30 @@ class SpatialBeamEIG(om.ExplicitComponent):
     def setup_partials(self):
         self.declare_partials('*', '*', method='cs')
 
-    def createNBSolver(self, params, unknowns):
+    def createNBSolver(self, inputs, outputs):
 
         self.NBSolver = pyNBSolver(M = self.reduced_M,        # Mass matrix
                                    K = self.reduced_K,        # Stiffness matrix
                                    N = self.num_dt+1,         # Number of timesteps you want to run
-                                   dt = unknowns['dt'])       # Timestep
+                                   dt = outputs['dt'])       # Timestep
 
-    def solve_nonlinear(self, params, unknowns, resids):
+    def compute(self, inputs, outputs):
 
         # NOTE: here this is only because Gio was running it with symmetry; need to check cons here to see which part of the matrix to use
-        self.reduced_M = params['M_matrix'][6:, 6:]
-        self.reduced_K = params['K_matrix'][6:, 6:]
+        self.reduced_M = inputs['M_matrix'][6:, 6:]
+        self.reduced_K = inputs['K_matrix'][6:, 6:]
 
-        unknowns['dt'] = self.final_t / self.num_dt
+        outputs['dt'] = self.final_t / self.num_dt
 
-        self.createNBSolver(params, unknowns)
+        self.createNBSolver(inputs, outputs)
 
-    # def linearize(self, params, unknowns, resids):
+    # def linearize(self, inputs, outputs, resids):
     #     """ Jacobian for eigenvalues and eigenvectors """
 
     #     jac = self.alloc_jacobian()
-    #     fd_jac = self.complex_step_jacobian(params, unknowns, resids,
-    #                             fd_params=['v', 'span', 'M_matrix', 'K_matrix'],
-    #                             fd_unknowns=['evalues', 'evectors', 'dt'],
+    #     fd_jac = self.complex_step_jacobian(inputs, outputs, resids,
+    #                             fd_inputs=['v', 'span', 'M_matrix', 'K_matrix'],
+    #                             fd_outputs=['evalues', 'evectors', 'dt'],
     #                             fd_states=[])
     #     jac.update(fd_jac)
 
@@ -351,8 +374,17 @@ class SpatialBeamEIG(om.ExplicitComponent):
 class SpatialBeamFEM(om.ExplicitComponent):
     """ Computes displacements of beam nodes by integrating dynamic system """
 
-    def __init__(self, nx, n, SBEIG, t):
-        super(SpatialBeamFEM, self).__init__()
+    def initialize(self):
+        self.options.declare("nx")
+        self.options.declare("n")
+        self.options.declare("SBEIG")
+        self.options.declare("t")
+
+    def setup(self):
+        nx = self.options["nx"]
+        n = self.options["n"]
+        SBEIG = self.options["SBEIG"]
+        t = self.options["t"]
 
         def_mesh_t = 'def_mesh_%d'%t
         loads_t = 'loads_%d'%t
@@ -379,8 +411,7 @@ class SpatialBeamFEM(om.ExplicitComponent):
     def setup_partials(self):
         self.declare_partials('*', '*', method='cs')
 
-
-    def solve_nonlinear(self, params, unknowns, resids):
+    def compute(self, inputs, outputs):
 
         n = self.num_y
         t = self.t
@@ -388,14 +419,14 @@ class SpatialBeamFEM(om.ExplicitComponent):
         loads_t = self.loads_t
         disp_aug_t = self.disp_aug_t
 
-        self.rhs = params['loads'].reshape((6*n))
+        self.rhs = inputs['loads'].reshape((6*n))
 
         self.SBEIG.NBSolver.stepCounter()
         self.SBEIG.NBSolver.setForces(self.rhs[6:])
         self.SBEIG.NBSolver.timeStepping()
-        unknowns[disp_aug_t][6:] = self.SBEIG.NBSolver.getCurDispl()
+        outputs[disp_aug_t][6:] = self.SBEIG.NBSolver.getCurDispl()
 
-    # def linearize(self, params, unknowns, resids):
+    # def linearize(self, inputs, outputs, resids):
     #     """ Jacobian for eigenvalues and eigenvectors """
 
     #     def_mesh_t = self.def_mesh_t
@@ -404,9 +435,9 @@ class SpatialBeamFEM(om.ExplicitComponent):
 
     #     jac = self.alloc_jacobian()
 
-    #     fd_jac = self.complex_step_jacobian(params, unknowns, resids,
-    #                             fd_params=['dt', def_mesh_t, loads_t],
-    #                             fd_unknowns=[disp_aug_t],
+    #     fd_jac = self.complex_step_jacobian(inputs, outputs, resids,
+    #                             fd_inputs=['dt', def_mesh_t, loads_t],
+    #                             fd_outputs=[disp_aug_t],
     #                             fd_states=[])
     #     jac.update(fd_jac)
     #     return jac
@@ -415,8 +446,13 @@ class SpatialBeamFEM(om.ExplicitComponent):
 class SpatialBeamDisp(om.ExplicitComponent):
     """ Selects displacements from augmented vector """
 
-    def __init__(self, n, t):
-        super(SpatialBeamDisp, self).__init__()
+    def initialize(self):
+        self.options.declare("n")
+        self.options.declare("t")
+
+    def setup(self):
+        n = self.options["n"]
+        t = self.options["t"]
 
         disp_aug_t = 'disp_aug_%d'%t
         disp_t = 'disp_%d'%t
@@ -425,22 +461,23 @@ class SpatialBeamDisp(om.ExplicitComponent):
         self.add_input(disp_aug_t, val=numpy.zeros((size)))
         self.add_output(disp_t, val=numpy.zeros((n, 6)))
 
-        self.declare_partials(of='*', wrt='*', method='fd', form='central')
-
         self.n = n
         self.t = t
 
         self.disp_aug_t = disp_aug_t
         self.disp_t = disp_t
 
-    def solve_nonlinear(self, params, unknowns, resids):
+    def setup_partials(self):
+        self.declare_partials(of='*', wrt='*', method='fd', form='central')
+
+    def compute(self, inputs, outputs):
         n = self.n
         disp_aug_t = self.disp_aug_t
         disp_t = self.disp_t
 
-        unknowns[disp_t] = numpy.array(params[disp_aug_t][:6*n].reshape((n, 6)))
+        outputs[disp_t] = numpy.array(inputs[disp_aug_t][:6*n].reshape((n, 6)))
 
-    # def linearize(self, params, unknowns, resids):
+    # def linearize(self, inputs, outputs, resids):
 
     #     disp_aug_t = self.disp_aug_t
     #     disp_t = self.disp_t
@@ -462,11 +499,11 @@ class SpatialBeamStates(om.Group):
 
 
         self.add_subsystem(name_fem_t,
-                 SpatialBeamFEM(num_x, num_y, SBEIG, t),
+                 SpatialBeamFEM(nx=num_x, n=num_y, SBEIG=SBEIG, t=t),
                  promotes=['*'])
 
         self.add_subsystem(name_disp_t,
-                 SpatialBeamDisp(num_y, t),
+                 SpatialBeamDisp(n=num_y, t=t),
                  promotes=['*'])
 
 
