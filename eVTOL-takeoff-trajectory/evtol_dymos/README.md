@@ -1,1 +1,0 @@
-# The Dymos implementation of the eVTOL

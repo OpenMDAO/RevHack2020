@@ -1,20 +1,9 @@
 """
-Driver for a differential evolution genetic algorithm.
-
-TODO: add better references than: https://en.wikipedia.org/wiki/Differential_evolution
-
-Most of this driver (except execute_ga) is based on SimpleGA, so the following may still apply:
-
-The following reference is only for the penalty function:
-Smith, A. E., Coit, D. W. (1995) Penalty functions. In: Handbook of Evolutionary Computation, 97(1).
-
-The following reference is only for weighted sum multi-objective optimization:
-Sobieszczanski-Sobieski, J., Morris, A. J., van Tooren, M. J. L. (2015)
-Multidisciplinary Design Optimization Supported by Knowledge Based Engineering.
-John Wiley & Sons, Ltd.
+Driver that uses Covariance Matrix Adaptation Evolution Strategy (CMAES).
 """
 import os
 import copy
+import time
 
 import numpy as np
 
@@ -40,8 +29,9 @@ class CMAESDriver(Driver):
     _concurrent_color : int
         Color of current rank when running a parallel model.
     _desvar_idx : dict
-        Keeps track of the indices for each desvar, since CMAES sees an array of
-        design variables.
+        Keeps track of the indices for each desvar.
+    CMAOptions : CMAOptions
+        Options for CMAES execution.
     _cmaes : <CMAES>
         CMAES object.
     _randomstate : np.random.RandomState, int
@@ -75,11 +65,11 @@ class CMAESDriver(Driver):
 
         self._desvar_idx = {}
 
+        self.CMAOptions = cma.CMAOptions()
+
         # random state can be set for predictability during testing
         if 'CMAESDriver_seed' in os.environ:
-            self._randomstate = int(os.environ['CMAESDriver_seed'])
-        else:
-            self._randomstate = None
+            self.CMAOptions['seed'] = int(os.environ['CMAESDriver_seed'])
 
         # Support for Parallel models.
         self._concurrent_pop_size = 0
@@ -89,15 +79,10 @@ class CMAESDriver(Driver):
         """
         Declare options before kwargs are processed in the init method.
         """
-        self.options.declare('pop_size', default=None,
-                             desc='population size, AKA lambda, number of new solution per iteration.'
-                                  'default: 4+int(3*np.log(N))')
         self.options.declare('sigma0', default=.1, types=float,
                              desc='Initial standard deviation in each coordinate. '
                                   'sigma0 should be about 1/4th of the search domain width '
                                   '(where the optimum is to be expected).')
-        self.options.declare('verbose', default=-9,
-                             desc='Verbosity of CMAES (-1 is very quiet, -9 maximally quiet).')
         self.options.declare('run_parallel', types=bool, default=False,
                              desc='Set to True to execute the points in a generation in parallel.')
         self.options.declare('procs_per_model', default=1, lower=1,
@@ -189,7 +174,7 @@ class CMAESDriver(Driver):
 
     def run(self):
         """
-        Execute the genetic algorithm.
+        Execute the CMA-ES algorithm.
 
         Returns
         -------
@@ -219,11 +204,9 @@ class CMAESDriver(Driver):
             upper_bound[i:j] = meta['upper']
             x0[i:j] = desvar_vals[name]
 
-        desvar_new, obj = self._cmaes.execute(x0, lower_bound, upper_bound,
-                                              self.options['sigma0'],
-                                              self.options['pop_size'],
-                                              self.options['verbose'],
-                                              self._randomstate)
+        self.CMAOptions['bounds'] = [lower_bound, upper_bound]
+
+        desvar_new, obj = self._cmaes.execute(x0, self.options['sigma0'], self.CMAOptions)
 
         # Pull optimal parameters back into framework and re-run, so that
         # framework is left in the right final state
@@ -405,12 +388,8 @@ class CMAES(object):
         If the model in objfun is also parallel, then this will contain a tuple with the the
         total number of population points to evaluate concurrently, and the color of the point
         to evaluate on this rank.
-    pop_size : int
-        Population size.
     objfun : function
         Objective function callback.
-    CMAOptions : CMAOptions
-        Options for CMAES execution.
     """
 
     def __init__(self, objfun, comm=None, model_mpi=None):
@@ -430,11 +409,9 @@ class CMAES(object):
         """
         self.comm = comm
         self.model_mpi = model_mpi
-
         self.objfun = objfun
-        self.CMAOptions = cma.CMAOptions()
 
-    def execute(self, x0, vlb, vub, sigma0, pop_size, verbose, random_state):
+    def execute(self, x0, sigma0, CMAOptions):
         """
         Execute the CMA Evolution Strategy.
 
@@ -448,12 +425,8 @@ class CMAES(object):
             Upper bounds array.
         sigma0 : float
             Initial standard deviation in each coordinate.
-        pop_size : int
-            Number of points in the population.
-        verbose : int
-            verbosity e.g. of initial/final message, -1 is very quiet, -9 maximally quiet
-        random_state : np.random.RandomState, int
-            Random state (or seed-number) which controls the seed and random draws.
+        CMAOptions : CMAOptions
+            Options for CMAES execution.
 
         Returns
         -------
@@ -465,28 +438,67 @@ class CMAES(object):
         comm = self.comm
 
         if comm is None:
+            # Running non-parallel, use functional interface
 
-            self.CMAOptions['bounds'] = [vlb, vub]
-            self.CMAOptions['verbose'] = verbose
-            if random_state:
-                self.CMAOptions['seed'] = random_state
-            if pop_size:
-                self.CMAOptions['popsize'] = pop_size
-
-            res = cma.fmin(self.objfun, x0, sigma0, options=self.CMAOptions)
+            res = cma.fmin(self.objfun, x0, sigma0, options=CMAOptions)
 
             return res[0], res[1]
 
         else:
-            # FIXME:  run in parallel
+            # Running parallel, use OO interface
 
-            self.CMAOptions['bounds'] = [vlb, vub]
-            self.CMAOptions['verbose'] = verbose
-            if random_state:
-                self.CMAOptions['seed'] = random_state
-            if pop_size:
-                self.CMAOptions['popsize'] = pop_size
+            # make sure all procs have the same seed
+            seed = CMAOptions['seed']
+            if comm.rank == 0 and (not isinstance(seed, int) or seed == 0):
+                seed = int(time.time())
+            CMAOptions['seed'] = comm.bcast(seed, root=0)
 
-            res = cma.fmin(self.objfun, x0, sigma0, options=self.CMAOptions)
+            optim = cma.CMAEvolutionStrategy(x0, sigma0, CMAOptions)
 
-            return res[0], res[1]
+            stop = False
+
+            while not stop:  # optim.stop():
+                # get candidate solutions
+                X = optim.ask()
+
+                # pad candidates to make them divisible into procs.
+                cases = [((item, ), None) for ii, item in enumerate(X)]
+                extra = len(cases) % comm.size
+                if extra > 0:
+                    for j in range(comm.size - extra):
+                        cases.append(cases[-1])
+
+                # evaluate candidate solutions concurrently
+                results = concurrent_eval(self.objfun, cases, comm,
+                                          allgather=True, model_mpi=self.model_mpi)
+
+                # assemble solutions corresponding to X
+                f = []
+                for i in range(len(X)):
+                    returns, traceback = results[i]
+                    if returns:
+                        f.append(returns)
+                    else:
+                        # Print the traceback if it fails
+                        print('A case failed:')
+                        print(traceback)
+
+                # do the "update", pass f-values and prepare for next iteration
+                optim.tell(X, f)
+                optim.disp(20)       # display info every 20th iteration
+                optim.logger.add()   # log another "data line", non-standard
+
+                # gather stop conditions, stop if any proc stops
+                # (all procs should stop with same stop condition)
+                stops = comm.allgather(optim.stop())
+                for proc_stop in stops:
+                    if len(proc_stop) > 0:
+                        stop = True
+
+            # final output
+            # print('termination by', stops)
+            # print('best f-value =', optim.result[1])
+            # print('best solution =', optim.result[0])
+            # optim.logger.plot()  # if matplotlib is available
+
+            return optim.result[0], optim.result[1]
