@@ -59,7 +59,22 @@ In fact, we have a great example from the eVTOL trajectory optimization solution
 We solved this problem by building an ordinary differential equation (ODE) of the problem dynamics, and then solving an trajectory optimization in our Dymos library. 
 The general structure of the calculations was as follows: 
 
-[insert cartoon here]
+
+
+    +-----------------+
+    |                 | +-------------+
+    |  Pre-processing |               |
+    |                 |     +---------v-------------+
+    +-----------------+     |                       +-----------+
+                            | Implicit calculation  |           |
+                            |                       |           |
+                            +-----------------------+   +-------v---------+
+                                                        |                 |
+                                                        | Post-processing |
+                                                        +-----------------+
+
+
+
 
 The diagram implies that 3 components would be appropriate so we tried that. 
 We also grouped the first two chunks into a single component, and the made an ODE out of two components. 
