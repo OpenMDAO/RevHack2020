@@ -117,15 +117,15 @@ The exception to the rule stands none the less. Here was a case where derivative
 
 ## Recommendation: start-small to learn, but go big for production code 
 
-To be completely honest, we think that code is easier to read/debug if you make fewer larger components. 
-We think you should tend in that direction, but we also still strongly recommend analytic derivatives and that pushes back toward smaller components. 
+We think that code is easier to read/debug if you make fewer larger components, and we would like to move more of our own code in that direction. 
+However, we also still strongly recommend analytic derivatives and that pushes back toward smaller components. 
 So there is a bit of tension there, with competing objectives. 
 
 What is the solution? **Algorithmic differentiation (AD)!**
 In years past, AD for python wasn't great. 
 In truth, its still not an ideal language for AD but thanks to massive volumes of machine learning research things have advanced a lot. 
-[JAX][jax] seems like a really great tool, and we were surprised how successful we were with it on OAS during this hackathon. 
-Also, OpenMDAO has some really strong support for efficient complex-step, which is a form of forward algorithmic differentiation.  We even have some nice tools for [using CS efficiently in some cases if you have large vector inputs][partial-coloring]. 
+[JAX][jax] seems like good tool, and we were surprised how successful we were with it on OAS during this hackathon. 
+Also, OpenMDAO has some strong support for efficient complex-step, which is a form of forward algorithmic differentiation.  We even have some nice tools for [using CS efficiently in some cases if you have large vector inputs][partial-coloring]. 
 
 So for your production code we recommend that you tend toward larger components, and try out CS or other AD tools. 
 However, we think that when you're just learning OpenMDAO, or how to use AD, then smaller components are the way to start. 
