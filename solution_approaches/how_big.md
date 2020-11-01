@@ -133,14 +133,12 @@ To counter that, you can try our [partial derivative coloring features][partial-
 
 Another option is more traditional AD. 
 We tried [JAX][jax] during this hackathon and had some good luck with it. 
-Also there is [pyTorch][https://pytorch.org/]. 
 
 In general, based on our experiences in this hackathon AD is something the devs are going to be investing our own time into more heavily. 
 Its the key to making larger components work smoothly in OpenMDAO. 
 
 
 
-[pytorch]: https://pytorch.org/
 [cs-safe]: https://github.com/OpenMDAO/OpenMDAO/blob/master/openmdao/utils/cs_safe.py
 [partial-coloring]: http://openmdao.org/twodocs/versions/3.4.0/features/experimental/simul_coloring_fd_cs.html
 [jax]: https://github.com/google/jax
