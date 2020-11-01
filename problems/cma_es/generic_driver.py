@@ -1,5 +1,5 @@
 """
-Driver Template.
+Generic Driver with user provided Algorithm.
 """
 import os
 import copy
@@ -15,9 +15,7 @@ from openmdao.core.analysis_error import AnalysisError
 
 class GenericDriver(Driver):
     """
-    Driver for a differential evolution genetic algorithm.
-
-    This algorithm requires that inputs are floating point numbers.
+    Generic Driver with user provided Algorithm.
 
     Attributes
     ----------
@@ -373,7 +371,7 @@ class GenericDriver(Driver):
 
 class DriverAlgorithm(object):
     """
-    Absrtact Algorithm.
+    Abstract Algorithm.
 
     Attributes
     ----------
@@ -389,7 +387,7 @@ class DriverAlgorithm(object):
 
     def __init__(self, comm=None, model_mpi=None):
         """
-        Initialize CMA Evolution Strategy object.
+        Initialize algorithm object.
 
         Parameters
         ----------
@@ -405,7 +403,7 @@ class DriverAlgorithm(object):
 
     def execute(self, x0, vlb, ulb, objfun):
         """
-        Execute the CMA Evolution Strategy.
+        Execute the algorithm.
 
         Parameters
         ----------
