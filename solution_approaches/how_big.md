@@ -93,12 +93,12 @@ So win-win right? Yeah, in this case... because we used complex-step partials.
 If we had been hand differentiating these components, I would have gladly traded that run-time for less effort on the derivatives. 
 
 
-### Counter Example: OpenAeroStruct stability derivative optimization 
+### Counter Example: OpenAeroStruct (OAS) stability derivative optimization 
 
 Of course, it wouldn't be a rule of thumb if there were not counter examples. 
 We didn't have to look very far, since a different hackathon problem provided it! 
 
-OpenAeroStruct is a low-fidelity aerostructural solver, built natively in OpenMDAO. 
+OpenAeroStruct (OAS) is a low-fidelity aerostructural solver, built natively in OpenMDAO. 
 It tends to have many smaller components in order to make the derivatives easier to hand-derive. 
 However (skipping a lot of details), when solving this problem we found that modest sized meshes were pretty slow. 
 We used the OpenMDAO profiling tools to see that the cause of the problem was that there were a couple of components with outputs that got massive (i.e. the size of the arrays got very large) as the mesh grew and OpenMDAO's direct linear solver was bogging down a bit. 
@@ -118,23 +118,30 @@ The exception to the rule stands none the less. Here was a case where derivative
 ## Recommendation: start-small to learn, but go big for production code 
 
 We think that code is easier to read/debug if you make fewer larger components, and we would like to move more of our own code in that direction. 
-However, we also still strongly recommend analytic derivatives and that pushes back toward smaller components. 
-So there is a bit of tension there, with competing objectives. 
+So thats what we'll recommend to you as well. 
+Tend toward larger components with more calculations aggregated into a single `compute` method. 
 
-What is the solution? **Algorithmic differentiation (AD)!**
-In years past, AD for python wasn't great. 
-In truth, its still not an ideal language for AD but thanks to massive volumes of machine learning research things have advanced a lot. 
-[JAX][jax] seems like good tool, and we were surprised how successful we were with it on OAS during this hackathon. 
-Also, OpenMDAO has some strong support for efficient complex-step, which is a form of forward algorithmic differentiation.  We even have some nice tools for [using CS efficiently in some cases if you have large vector inputs][partial-coloring]. 
+The major challenge with larger components it that they become much hard to provide derivatives for by hand. 
+The solution to that problem is **Algorithmic differentiation (AD)**, but we hesitate to recommend you start out with AD from the get go. For one thing, AD support in python is ok but not as good as other languages. 
+For another thing, you'll be a much better user of AD if you have some first hand experience with manual differentiation. 
 
-So for your production code we recommend that you tend toward larger components, and try out CS or other AD tools. 
-However, we think that when you're just learning OpenMDAO, or how to use AD, then smaller components are the way to start. 
-CS and AD are not perfect, and there are some gotchas that you need to know about. 
-These corner-cases make a lot more sense when you have some experience hand differentiating things. 
-So the intuition and experience you gain from doing things by hand for a bit is invaluable. 
+For AD you have a few options. The first, is just to use the build in complex-step (CS) partial derivative approximation tools in OpenMDAO. 
+CS is a form of forward-mode AD that is very easy to use, though you do need to be cautious because not all numpy functions are complex-safe. 
+We've run into this enough that we've started a library of [CS-safe alternatives][cs-safe] in an OpenMDAO util package. 
+If you are building components with inputs that are large vectors, CS can potentially get pretty expensive. 
+To counter that, you can try our [partial derivative coloring features][partial-coloring] which may (or may not) help, depending on the sparsity patterns in your component. 
+
+Another option is more traditional AD. 
+We tried [JAX][jax] during this hackathon and had some good luck with it. 
+Also there is [pyTorch][https://pytorch.org/]. 
+
+In general, based on our experiences in this hackathon AD is something the devs are going to be investing our own time into more heavily. 
+Its the key to making larger components work smoothly in OpenMDAO. 
 
 
 
+[pytorch]: https://pytorch.org/
+[cs-safe]: https://github.com/OpenMDAO/OpenMDAO/blob/master/openmdao/utils/cs_safe.py
 [partial-coloring]: http://openmdao.org/twodocs/versions/3.4.0/features/experimental/simul_coloring_fd_cs.html
 [jax]: https://github.com/google/jax
 [sellar]: http://openmdao.org/twodocs/versions/3.4.0/basic_guide/sellar.html#building-the-disciplinary-components
