@@ -234,8 +234,9 @@ def CLfunc(angle, alpha_stall, AR, e, a0, t_over_c):
     CL1 = CLa * angle
 
     A1 = CD_max / 2
-    A2 = (CL_stall - CD_max * np.sin(alpha_stall) * np.cos(alpha_stall)) * np.sin(alpha_stall) / np.cos(alpha_stall)**2
-    CL2 = A1 * np.sin(2 * angle) + A2 * np.cos(angle)**2 / np.sin(angle)
+    A2 = (CL_stall - CD_max * np.sin(alpha_stall) * np.cos(alpha_stall)) * np.sin(
+        alpha_stall) / np.cos(alpha_stall) ** 2
+    CL2 = A1 * np.sin(2 * angle) + A2 * np.cos(angle) ** 2 / np.sin(angle)
 
     CL_array = np.vstack((-CL1, -CL2)).T
     CL_array_neg = np.vstack((CL1, CL2)).T
@@ -248,9 +249,12 @@ def CLfunc(angle, alpha_stall, AR, e, a0, t_over_c):
 
     with np.printoptions(linewidth=1024):
         if np.any(angle >= 0):
-            CL[pos_idxs] = -(fmax[pos_idxs, np.newaxis] + 1 / ks_rho * np.log(np.sum(np.exp(ks_rho * (CL_array[pos_idxs, :] - fmax[pos_idxs, np.newaxis]))))).ravel()
+            sum_term = np.sum(np.exp(ks_rho * (CL_array[pos_idxs] - fmax[pos_idxs, np.newaxis])), axis=1)
+            CL[pos_idxs] = -(fmax[pos_idxs] + 1 / ks_rho * np.log(sum_term)).ravel()
         if np.any(angle < 0):
-            CL[neg_idxs] = (fmax_neg[neg_idxs, np.newaxis] + 1 / ks_rho * np.log(np.sum(np.exp(ks_rho * (CL_array_neg[neg_idxs] - fmax_neg[neg_idxs, np.newaxis]))))).ravel()
+            sum_term = np.sum(np.exp(ks_rho * (CL_array_neg[neg_idxs] - fmax_neg[neg_idxs, np.newaxis])), axis=1)
+            CL[neg_idxs] = (fmax_neg[neg_idxs] + 1 / ks_rho * np.log(sum_term)).ravel()
+
     return CL
 
 def CDfunc(angle, AR, e, alpha_stall, coeffs, a0, t_over_c):
@@ -403,7 +407,6 @@ class Dynamics(om.ExplicitComponent):
         self.v_factor = input_dict['induced_velocity_factor']  # induced-velocity factor
         self.stall_option = input_dict[
             'stall_option']  # stall option: 's' allows stall, 'ns' does not
-        # self.num_steps = input_dict['num_steps']  # number of time steps
         self.R = input_dict['R']  # propeller radius
         self.solidity = input_dict['solidity']  # propeller solidity
         self.omega = input_dict['omega']  # propeller angular speed
@@ -422,14 +425,16 @@ class Dynamics(om.ExplicitComponent):
         self.add_input('theta', val=np.ones(nn))
         self.add_input('vx', val=np.ones(nn))
         self.add_input('vy', val=np.ones(nn))
-        # self.add_input('flight_time', val=15. * 60)
-        # openmdao outputs from the component
+
+        # component outputs for the state rates
         self.add_output('x_dot', val=np.ones(nn))
         self.add_output('y_dot', val=np.ones(nn))
-        self.add_output('vx_dot', val=np.ones(nn))
-        self.add_output('vy_dot', val=np.ones(nn))
+        self.add_output('a_x', val=np.ones(nn))
+        self.add_output('a_y', val=np.ones(nn))
         self.add_output('energy_dot', val=np.ones(nn))
 
+        # component outputs for auxiliary outputs we may want
+        # to constrain or view in timeseries
         self.add_output('acc', val=np.ones(nn))
         self.add_output('CL', val=np.ones(nn))
         self.add_output('CD', val=np.ones(nn))
@@ -440,52 +445,17 @@ class Dynamics(om.ExplicitComponent):
         self.add_output('aoa', val=np.ones(nn))
         self.add_output('thrust', val=np.ones(nn))
         self.add_output('vi', val=np.ones(nn))
-        # if self.stall_option == 'ns':
-        #     self.add_output('aoa_max', shape=np.ones(nn))
-        #     self.add_output('aoa_min', shape=np.ones(nn))
-        # self.add_output('acc_max', shape=np.ones(nn))
-
-        # some state variables
-        # self.x_dots = np.ones(self.num_steps + 1, dtype=complex)  # horizontal speeds
-        # self.y_dots = np.ones(self.num_steps + 1, dtype=complex)  # vertical speeds
-        # self.thrusts = np.ones(self.num_steps + 1, dtype=complex)  # thrusts
-        # self.atov = np.ones(self.num_steps + 1, dtype=complex)  # freestream angles to vertical
-        # self.CL = np.zeros(self.num_steps + 1, dtype=complex)  # wing lift coefficients
-        # self.CD = np.zeros(self.num_steps + 1, dtype=complex)  # wing drag coefficients
-        # # self.x = np.zeros(self.num_steps + 1, dtype=complex)  # horizontal positions
-        # # self.y = np.zeros(self.num_steps + 1, dtype=complex)  # vertical positions
-        # self.energy = np.zeros(self.num_steps + 1, dtype=complex)  # electrical energy consumed
-        # self.aoa = np.zeros(self.num_steps, dtype=complex)  # effective wing angles of attack
-        # self.u_inf_prop = np.zeros(self.num_steps,
-        #                            dtype=complex)  # freestream speeds normal to propeller disks
-        # self.v_i = np.zeros(self.num_steps,
-        #                     dtype=complex)  # effective propeller-induced speeds seen by wings
-        # self.acc = np.zeros(self.num_steps, dtype=complex)  # acceleration magnitude in g's
-        # self.a_x = np.zeros(self.num_steps, dtype=complex)  # horizontal acceleration
-        # self.a_y = np.zeros(self.num_steps, dtype=complex)  # vertical acceleration
-        # self.L_wings = np.zeros(self.num_steps, dtype=complex)  # total lift of the wings
-        # self.D_wings = np.zeros(self.num_steps, dtype=complex)  # total drag of the wings
-        # self.D_fuse = np.zeros(self.num_steps, dtype=complex)  # drag of the fuselage
-        # self.N = np.zeros(self.num_steps, dtype=complex)  # total propeller normal force
-        # self.aoa_prop = np.zeros(self.num_steps, dtype=complex)  # propeller angle of attack
 
         # use complex step for partial derivatives
-        self.declare_partials('*', '*', method='fd')
+        self.declare_partials('*', '*', method='cs')
 
-        # Partial derivative coloring
-        # self.declare_coloring(wrt=['*'], method='cs', tol=1.0E-12, num_full_jacs=5,
+        # # Partial derivative coloring
+        # self.declare_coloring(wrt=['*'], method='cs', tol=1.0E-15, num_full_jacs=5,
         #                       show_summary=True, show_sparsity=True, min_improve_pct=10.)
 
     def compute(self, inputs, outputs):
 
-        # self.x_dots[0] = self.x_dot_initial
-        # self.y_dots[0] = self.y_dot_initial
         thrust = self.T_guess * np.ones(self.options['num_nodes'])
-        # self.atov[0] = cs_atan2(self.x_dots[0], self.y_dots[0])
-        # self.energy[0] = 0.
-        # self.y[0] = self.y_initial
-
-        # self.flight_time = inputs['flight_time']
         power = inputs['power']
         theta = inputs['theta']
 
@@ -519,16 +489,20 @@ class Dynamics(om.ExplicitComponent):
         outputs['atov'] = atov
         outputs['x_dot'] = vx
         outputs['y_dot'] = vy
-        outputs['vx_dot'] = (thrust * np.sin(theta) - D_fuse * np.sin(atov) - D_wings * np.sin(theta + aoa_blown) - L * np.cos(theta + aoa_blown) - Normal_F * np.cos(theta)) / self.m
-        outputs['vy_dot'] = (thrust * np.cos(theta) - D_fuse * np.cos(atov) - D_wings * np.cos(theta + aoa_blown) + L * np.sin(theta + aoa_blown) + Normal_F * np.sin(theta) - self.m * 9.81) / self.m
+        outputs['a_x'] = (thrust * np.sin(theta) - D_fuse * np.sin(atov) -
+                          D_wings * np.sin(theta + aoa_blown) - L * np.cos(theta + aoa_blown) -
+                          self.n_props * Normal_F * np.cos(theta)) / self.m
+        outputs['a_y'] = (thrust * np.cos(theta) - D_fuse * np.cos(atov) -
+                          D_wings * np.cos(theta + aoa_blown) + L * np.sin(theta + aoa_blown)
+                          + self.n_props * Normal_F * np.sin(theta) - self.m * 9.81) / self.m
         outputs['energy_dot'] = power
 
-        outputs['acc'] = np.sqrt(outputs['vx_dot']**2 + outputs['vy_dot']**2) / 9.81
+        outputs['acc'] = np.sqrt(outputs['a_x']**2 + outputs['a_y']**2) / 9.81
         outputs['CL'] = CL
         outputs['CD'] = CD
         outputs['L_wings'] = L
         outputs['D_wings'] = D_wings
-        outputs['D_fuse'] = D_wings
+        outputs['D_fuse'] = D_fuse
         outputs['aoa'] = aoa_blown
         outputs['thrust'] = thrust
         outputs['vi'] = vi

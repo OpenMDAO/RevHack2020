@@ -1,17 +1,15 @@
 """ Code to run aerostructural analysis and evaluate flutter velocity.
 Call as `python run_aerostruct.py` to run a single analysis. """
 
-from __future__ import division
 import numpy
 from time import time
 
-from openmdao.api import IndepVarComp, Problem, Group, ScipyOptimizer, Newton, ScipyGMRES, LinearGaussSeidel, NLGaussSeidel, SqliteRecorder, profile
+import openmdao.api as om
 from geometry import GeometryMesh, gen_crm_mesh, gen_mesh
 from materials import MaterialsTube
-from spatialbeam import SpatialBeamMatrices, SpatialBeamEIG, radii
+from spacialbeam import SpatialBeamMatrices, SpatialBeamEIG, radii
 from timeloop import SingleStep
 from uvlm import UVLMFunctionals
-from openmdao.devtools.partition_tree_n2 import view_tree
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -25,8 +23,8 @@ velocities_vect = numpy.linspace(10.0, 50.0, num=num_of_points)
 #zeta_vect = numpy.linspace(0., 1., num=num_of_points)
 alpha_vect = numpy.linspace(2.0, 2.0, num=num_of_angles)
 
-for p in xrange(num_of_angles):
-    for i in xrange(num_of_points):
+for p in range(num_of_angles):
+    for i in range(num_of_points):
 
         v = velocities_vect[i]
         #v = 200.                       # flow speed [m/s]
@@ -112,48 +110,51 @@ for p in xrange(num_of_angles):
         #######################
         # Calls of components #
         #######################
-        root = Group()
+        root = om.Group()
 
         # Components before the time loop
-        root.add('indep_vars',
-                 IndepVarComp(indep_vars),
+
+        for i in indep_vars:
+            root.add_subsystem(i[0],
+                    om.IndepVarComp(i[0], i[1]),
+                    promotes=['*'])
+        root.add_subsystem('tube',
+                 MaterialsTube(n=num_y_sym),
                  promotes=['*'])
-        root.add('tube',
-                 MaterialsTube(num_y_sym),
+        root.add_subsystem('mesh',
+                 GeometryMesh(mesh=full_wing_mesh, num_twist=num_twist),
                  promotes=['*'])
-        root.add('mesh',
-                 GeometryMesh(full_wing_mesh, num_twist),
+        root.add_subsystem('matrices',
+                 SpatialBeamMatrices(nx=num_x, n=num_y_sym, E=E, G=G, mrho=mrho,
+                                     fem_origin=fem_origin),
                  promotes=['*'])
-        root.add('matrices',
-                 SpatialBeamMatrices(num_x, num_y_sym, E, G, mrho, fem_origin),
-                 promotes=['*'])
-        SBEIG = SpatialBeamEIG(num_y_sym, num_dt, final_t)
-        root.add('eig',
+        SBEIG = SpatialBeamEIG(n=num_y_sym, num_dt=num_dt, final_t=final_t)
+        root.add_subsystem('eig',
                  SBEIG,
                  promotes=['*'])
 
         # Time loop
-        coupled = Group()
-        for t in xrange(num_dt):
+        coupled = om.Group()
+        for t in range(num_dt):
             name_step = 'step_%d'%t
-            coupled.add(name_step,
+            coupled.add_subsystem(name_step,
                         SingleStep(num_x, num_y_sym, num_w, E, G, mrho, fem_origin, SBEIG, t),
                         promotes=['*'])
 
         # Set solver properties for the coupled group
-        coupled.ln_solver = ScipyGMRES()
+        coupled.ln_solver = om.ScipyKrylov()
         coupled.ln_solver.options['iprint'] = 1
-        coupled.ln_solver.preconditioner = LinearGaussSeidel()
+        coupled.ln_solver.preconditioner = om.LinearBlockGS()
 
-        coupled.nl_solver = NLGaussSeidel()
+        coupled.nl_solver = om.NonlinearBlockGS()
         coupled.nl_solver.options['iprint'] = 1
 
-        root.add('coupled',
+        root.add_subsystem('coupled',
                  coupled,
                  promotes=['*'])
 
         # Components after the time loop
-        root.add('vlm_funcs',
+        root.add_subsystem('vlm_funcs',
                  UVLMFunctionals(num_x, num_y_sym, CL0, CD0, num_dt),
                  promotes=['*'])
 
@@ -161,23 +162,21 @@ for p in xrange(num_of_angles):
         # Run the program #
         ###################
 
-        prob = Problem()
-        prob.root = root
-        prob.print_all_convergence()
+        prob = om.Problem()
+        prob.model = root
+        prob.set_solver_print()
 
         # Setup data recording
         # name_data = '%s_v%.2f_ndt%.0f_damp%.2f_alpha%.1f_w%.0f'%(wing, v, num_dt, zeta, alpha, num_w)
         # db_name = 'results/flutter/db/%s'%(name_data)
-        # prob.driver.add_recorder(SqliteRecorder(db_name))
+        # prob.driver.add_recorder(om.SqliteRecorder(db_name))
 
         prob.setup()
-        view_tree(prob, outfile="aerostruct.html", show_browser=False)
+        om.n2(prob, outfile="aerostruct.html", show_browser=False)
         st = time()
-        prob.run_once()
+        prob.run_model()
 
-        print
-        print "run time", time() - st
-        print
-        print "number of steps =", num_dt
-        print "dt =", prob['dt']
-        print "CL =", prob['CL'], "; CD =", prob['CD']
+        print("run time", time() - st)
+        print("number of steps =", num_dt)
+        print("dt =", prob['dt'])
+        print("CL =", prob['CL'], "; CD =", prob['CD'])

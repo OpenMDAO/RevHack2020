@@ -1,9 +1,8 @@
 """
-Driver that uses Covariance Matrix Adaptation Evolution Strategy (CMAES).
+Generic Driver with user provided Algorithm.
 """
 import os
 import copy
-import time
 
 import numpy as np
 
@@ -13,14 +12,10 @@ from openmdao.utils.concurrent import concurrent_eval
 from openmdao.utils.mpi import MPI
 from openmdao.core.analysis_error import AnalysisError
 
-import cma
 
-
-class CMAESDriver(Driver):
+class GenericDriver(Driver):
     """
-    Driver for a Covariance Matrix Adaptation Evolution Strategy (CMAES).
-
-    This algorithm requires that inputs are floating point numbers.
+    Generic Driver with user provided Algorithm.
 
     Attributes
     ----------
@@ -30,17 +25,12 @@ class CMAESDriver(Driver):
         Color of current rank when running a parallel model.
     _desvar_idx : dict
         Keeps track of the indices for each desvar.
-    CMAOptions : CMAOptions
-        Options for CMAES execution.
-    _cmaes : <CMAES>
-        CMAES object.
-    _randomstate : np.random.RandomState, int
-        Random state (or seed-number) which controls the seed.
+        design variables.
     """
 
     def __init__(self, **kwargs):
         """
-        Initialize the CMAESDriver driver.
+        Initialize the driver.
 
         Parameters
         ----------
@@ -65,12 +55,6 @@ class CMAESDriver(Driver):
 
         self._desvar_idx = {}
 
-        self.CMAOptions = cma.CMAOptions()
-
-        # random state can be set for predictability during testing
-        if 'CMAESDriver_seed' in os.environ:
-            self.CMAOptions['seed'] = int(os.environ['CMAESDriver_seed'])
-
         # Support for Parallel models.
         self._concurrent_pop_size = 0
         self._concurrent_color = 0
@@ -79,23 +63,25 @@ class CMAESDriver(Driver):
         """
         Declare options before kwargs are processed in the init method.
         """
-        self.options.declare('sigma0', default=.1, types=float,
-                             desc='Initial standard deviation in each coordinate. '
-                                  'sigma0 should be about 1/4th of the search domain width '
-                                  '(where the optimum is to be expected).')
+        self.options.declare('algorithm', types=DriverAlgorithm, default=None,
+                             desc='Driver algorithm.')
+
+        # options related to parallelization
         self.options.declare('run_parallel', types=bool, default=False,
                              desc='Set to True to execute the points in a generation in parallel.')
         self.options.declare('procs_per_model', default=1, lower=1,
                              desc='Number of processors to give each model under MPI.')
+
+        # options related to multi-objective support
         self.options.declare('penalty_parameter', default=10., lower=0.,
                              desc='Penalty function parameter.')
         self.options.declare('penalty_exponent', default=1.,
                              desc='Penalty function exponent.')
         self.options.declare('multi_obj_weights', default={}, types=(dict),
                              desc='Weights of objectives for multi-objective optimization.'
-                                  'Weights are specified as a dictionary with the absolute names '
-                                  'of the objectives. The same weights for all objectives are '
-                                  'assumed, if not given.')
+                             'Weights are specified as a dictionary with the absolute names'
+                             'of the objectives. The same weights for all objectives are assumed, '
+                             'if not given.')
         self.options.declare('multi_obj_exponent', default=1., lower=0.,
                              desc='Multi-objective weighting exponent.')
 
@@ -114,12 +100,11 @@ class CMAESDriver(Driver):
 
         model_mpi = None
         comm = problem.comm
+
         if self._concurrent_pop_size > 0:
             model_mpi = (self._concurrent_pop_size, self._concurrent_color)
         elif not self.options['run_parallel']:
             comm = None
-
-        self._cmaes = CMAES(self.objective_callback, comm=comm, model_mpi=model_mpi)
 
     def _setup_comm(self, comm):
         """
@@ -170,11 +155,11 @@ class CMAESDriver(Driver):
         str
             Name of current Driver.
         """
-        return "CMAES"
+        return self.options['algorithm'].__class__.__name__
 
     def run(self):
         """
-        Execute the CMA-ES algorithm.
+        Execute the driver algorithm.
 
         Returns
         -------
@@ -204,15 +189,22 @@ class CMAESDriver(Driver):
             upper_bound[i:j] = meta['upper']
             x0[i:j] = desvar_vals[name]
 
-        self.CMAOptions['bounds'] = [lower_bound, upper_bound]
+        model_mpi = None
+        comm = self._problem().comm
+        if self._concurrent_pop_size > 0:
+            model_mpi = (self._concurrent_pop_size, self._concurrent_color)
+        elif not self.options['run_parallel']:
+            comm = None
 
-        desvar_new, obj = self._cmaes.execute(x0, self.options['sigma0'], self.CMAOptions)
+        xopt, fopt = self.options['algorithm'].execute(x0, lower_bound, upper_bound,
+                                                       self.objective_callback,
+                                                       comm, model_mpi)
 
         # Pull optimal parameters back into framework and re-run, so that
         # framework is left in the right final state
         for name in desvars:
             i, j = self._desvar_idx[name]
-            val = desvar_new[i:j]
+            val = xopt[i:j]
             self.set_design_var(name, val)
 
         with RecordingDebugging(self._get_name(), self.iter_count, self) as rec:
@@ -288,6 +280,7 @@ class CMAESDriver(Driver):
             Objective value
         """
         model = self._problem().model
+        success = 1
 
         objs = self.get_objective_values()
         nr_objectives = len(objs)
@@ -373,12 +366,12 @@ class CMAESDriver(Driver):
             rec.abs = 0.0
             rec.rel = 0.0
 
-        return fun
+        return fun  #, success
 
 
-class CMAES(object):
+class DriverAlgorithm(object):
     """
-    CMA Evolution Strategy.
+    Abstract Algorithm.
 
     Attributes
     ----------
@@ -392,14 +385,12 @@ class CMAES(object):
         Objective function callback.
     """
 
-    def __init__(self, objfun, comm=None, model_mpi=None):
+    def __init__(self, comm=None, model_mpi=None):
         """
-        Initialize CMA Evolution Strategy object.
+        Initialize algorithm object.
 
         Parameters
         ----------
-        objfun : function
-            Objective callback function.
         comm : MPI communicator or None
             The MPI communicator that will be used objective evaluation.
         model_mpi : None or tuple
@@ -409,11 +400,10 @@ class CMAES(object):
         """
         self.comm = comm
         self.model_mpi = model_mpi
-        self.objfun = objfun
 
-    def execute(self, x0, sigma0, CMAOptions):
+    def execute(self, x0, vlb, ulb, objfun):
         """
-        Execute the CMA Evolution Strategy.
+        Execute the algorithm.
 
         Parameters
         ----------
@@ -423,10 +413,8 @@ class CMAES(object):
             Lower bounds array.
         vub : ndarray
             Upper bounds array.
-        sigma0 : float
-            Initial standard deviation in each coordinate.
-        CMAOptions : CMAOptions
-            Options for CMAES execution.
+        objfun : function
+            Objective callback function.
 
         Returns
         -------
@@ -435,70 +423,4 @@ class CMAES(object):
         float
             Objective value at best design point.
         """
-        comm = self.comm
-
-        if comm is None:
-            # Running non-parallel, use functional interface
-
-            res = cma.fmin(self.objfun, x0, sigma0, options=CMAOptions)
-
-            return res[0], res[1]
-
-        else:
-            # Running parallel, use OO interface
-
-            # make sure all procs have the same seed
-            seed = CMAOptions['seed']
-            if comm.rank == 0 and (not isinstance(seed, int) or seed == 0):
-                seed = int(time.time())
-            CMAOptions['seed'] = comm.bcast(seed, root=0)
-
-            optim = cma.CMAEvolutionStrategy(x0, sigma0, CMAOptions)
-
-            stop = False
-
-            while not stop:  # optim.stop():
-                # get candidate solutions
-                X = optim.ask()
-
-                # pad candidates to make them divisible into procs.
-                cases = [((item, ), None) for ii, item in enumerate(X)]
-                extra = len(cases) % comm.size
-                if extra > 0:
-                    for j in range(comm.size - extra):
-                        cases.append(cases[-1])
-
-                # evaluate candidate solutions concurrently
-                results = concurrent_eval(self.objfun, cases, comm,
-                                          allgather=True, model_mpi=self.model_mpi)
-
-                # assemble solutions corresponding to X
-                f = []
-                for i in range(len(X)):
-                    returns, traceback = results[i]
-                    if returns:
-                        f.append(returns)
-                    else:
-                        # Print the traceback if it fails
-                        print('A case failed:')
-                        print(traceback)
-
-                # do the "update", pass f-values and prepare for next iteration
-                optim.tell(X, f)
-                optim.disp(20)       # display info every 20th iteration
-                optim.logger.add()   # log another "data line", non-standard
-
-                # gather stop conditions, stop if any proc stops
-                # (all procs should stop with same stop condition)
-                stops = comm.allgather(optim.stop())
-                for proc_stop in stops:
-                    if len(proc_stop) > 0:
-                        stop = True
-
-            # final output
-            # print('termination by', stops)
-            # print('best f-value =', optim.result[1])
-            # print('best solution =', optim.result[0])
-            # optim.logger.plot()  # if matplotlib is available
-
-            return optim.result[0], optim.result[1]
+        pass

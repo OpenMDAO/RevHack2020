@@ -1,21 +1,25 @@
-""" Unit tests for the CMAES Driver, mirroring tests for DifferentialEvolutionDriver. """
+""" Unit tests for generic DifferentialEvolution Driver."""
 
 import unittest
+
 import os
+import copy
 
 import numpy as np
 
 import openmdao.api as om
+from openmdao.drivers.differential_evolution_driver import DifferentialEvolution
 from openmdao.test_suite.components.branin import Branin, BraninDiscrete
 from openmdao.test_suite.components.paraboloid import Paraboloid
 from openmdao.test_suite.components.paraboloid_distributed import DistParab
 from openmdao.test_suite.components.sellar_feature import SellarMDA
 from openmdao.test_suite.components.three_bar_truss import ThreeBarTruss
 
-from openmdao.utils.assert_utils import assert_near_equal
 from openmdao.utils.mpi import MPI
+from openmdao.utils.concurrent import concurrent_eval
+from openmdao.utils.assert_utils import assert_near_equal
 
-from cmaes_driver import CMAESDriver
+from generic_driver import GenericDriver, DriverAlgorithm
 
 try:
     from openmdao.vectors.petsc_vector import PETScVector
@@ -25,10 +29,207 @@ except ImportError:
 extra_prints = True  # enable printing results
 
 
-class TestCMAESDriver(unittest.TestCase):
+class DifferentialEvolution(DriverAlgorithm):
+    """
+    Differential Evolution Genetic Algorithm.
 
+    TODO: add better references than: https://en.wikipedia.org/wiki/Differential_evolution
+
+    Attributes
+    ----------
+    comm : MPI communicator or None
+        The MPI communicator that will be used objective evaluation for each generation.
+    lchrom : int
+        Chromosome length.
+    model_mpi : None or tuple
+        If the model in objfun is also parallel, then this will contain a tuple with the the
+        total number of population points to evaluate concurrently, and the color of the point
+        to evaluate on this rank.
+    npop : int
+        Population size.
+    objfun : function
+        Objective function callback.
+    """
+    def __init__(self, pop_size=0, max_gen=100, random_state=None, F=0.5, Pc=0.5, comm=None, model_mpi=None):
+        """
+        Initialize genetic algorithm object.
+
+        Parameters
+        ----------
+        pop_size : int
+            Number of points in the population.
+        max_gen : int
+            Number of generations to run the GA.
+        random_state : np.random.RandomState, int
+            Random state (or seed-number) which controls the seed and random draws.
+        F : float
+            Differential rate
+        Pc : float
+            Crossover rate
+        comm : MPI communicator or None
+            The MPI communicator that will be used objective evaluation for each generation.
+        model_mpi : None or tuple
+            If the model in objfun is also parallel, then this will contain a tuple with the the
+            total number of population points to evaluate concurrently, and the color of the point
+            to evaluate on this rank.
+        """
+        super().__init__(comm, model_mpi)
+
+        self.pop_size = pop_size
+        self.max_gen = max_gen
+
+        # random state can be set for predictability during testing
+        self.random_state = random_state
+        if random_state is None and 'DifferentialEvolution_seed' in os.environ:
+            self.random_state = int(os.environ['DifferentialEvolution_seed'])
+
+        self.F = F
+        self.Pc = Pc
+
+        self.lchrom = 0
+        self.npop = 0
+
+    def execute(self, x0, vlb, vub, objfun, comm, model_mpi):
+        """
+        Perform the genetic algorithm.
+
+        Parameters
+        ----------
+        x0 : ndarray
+            Initial design values
+        vlb : ndarray
+            Lower bounds array.
+        vub : ndarray
+            Upper bounds array.
+        objfun : function
+            Objective callback function.
+
+        Returns
+        -------
+        ndarray
+            Best design point
+        float
+            Objective value at best design point.
+        """
+        xopt = copy.deepcopy(vlb)
+        fopt = np.inf
+        count = self.lchrom = len(x0)
+
+        pop_size = self.pop_size
+        if pop_size == 0:
+            pop_size = 20 * len(x0)
+
+        if np.mod(pop_size, 2) == 1:
+            pop_size += 1
+        self.npop = int(pop_size)
+
+        # use different seeds in different MPI processes
+        seed = self.random_state + comm.Get_rank() if comm else 0
+        rng = np.random.default_rng(seed)
+
+        # create random initial population, scaled to bounds
+        population = rng.random([self.npop, self.lchrom]) * (vub - vlb) + vlb  # scale to bounds
+        fitness = np.ones(self.npop) * np.inf  # initialize fitness to infinitely bad
+
+        # Main Loop
+        nfit = 0
+        for generation in range(self.max_gen + 1):
+            # Evaluate fitness of points in this generation
+            if comm is not None:  # Parallel
+                # Since GA is random, ranks generate different new populations, so just take one
+                # and use it on all.
+                population = comm.bcast(population, root=0)
+
+                cases = [((item, ii), None) for ii, item in enumerate(population)]
+
+                # Pad the cases with some dummy cases to make the cases divisible amongst the procs.
+                # TODO: Add a load balancing option to this driver.
+                extra = len(cases) % comm.size
+                if extra > 0:
+                    for j in range(comm.size - extra):
+                        cases.append(cases[-1])
+
+                results = concurrent_eval(objfun, cases, comm,
+                                          allgather=True, model_mpi=model_mpi)
+
+                fitness[:] = np.inf
+                for result in results:
+                    returns, traceback = result
+
+                    if returns:
+                        # val, success = returns
+                        # if success:
+                        #     fitness[ii] = val
+                        #     nfit += 1
+                        fitness[ii] = returns
+                        nfit += 1
+                    else:
+                        # Print the traceback if it fails
+                        print('A case failed:')
+                        print(traceback)
+            else:  # Serial
+                for ii in range(self.npop):
+                    # fitness[ii], success = objfun(population[ii])
+                    fitness[ii] = objfun(population[ii])
+                    nfit += 1
+
+            # Find best performing point in this generation.
+            min_fit = np.min(fitness)
+            min_index = np.argmin(fitness)
+            min_gen = population[min_index]
+
+            # Update overall best.
+            if min_fit < fopt:
+                fopt = min_fit
+                xopt = min_gen
+
+            if generation == self.max_gen:  # finished
+                break
+
+            # Selection: new generation members replace parents, if better (implied elitism)
+            if generation == 0:
+                parentPop = copy.deepcopy(population)
+                parentFitness = copy.deepcopy(fitness)
+            else:
+                for ii in range(self.npop):
+                    if fitness[ii] < parentFitness[ii]:  # if child is better, else parent unchanged
+                        parentPop[ii] = population[ii]
+                        parentFitness[ii] = fitness[ii]
+
+            # Evolve new generation.
+            population = np.zeros(np.shape(parentPop))
+            fitness = np.ones(self.npop) * np.inf
+
+            for ii in range(self.npop):
+                # randomly select 3 different population members other than the current choice
+                a, b, c = ii, ii, ii
+                while a == ii:
+                    a = rng.integers(0, self.npop)
+                while b == ii or b == a:
+                    b = rng.integers(0, self.npop)
+                while c == ii or c == a or c == b:
+                    c = rng.integers(0, self.npop)
+
+                # randomly select chromosome index for forced crossover
+                r = rng.integers(0, self.lchrom)
+
+                # crossover and mutation
+                population[ii] = parentPop[ii]  # start the same as parent
+                # clip mutant so that it cannot be outside the bounds
+                mutant = np.clip(parentPop[a] + self.F * (parentPop[b] - parentPop[c]), vlb, vub)
+                # sometimes replace parent's feature with mutant's
+                rr = rng.random(self.lchrom)
+                idx = np.where(rr < self.Pc)
+                population[ii][idx] = mutant[idx]
+                population[ii][r] = mutant[r]  # always replace at least one with mutant's
+
+        return xopt, fopt
+
+
+class TestDifferentialEvolution(unittest.TestCase):
     def setUp(self):
-        os.environ['CMAESDriver_seed'] = '11'  # make RNG repeatable
+        import os  # import needed in setup for tests in documentation
+        os.environ['DifferentialEvolution_seed'] = '11'  # make RNG repeatable
 
     def test_rastrigin(self):
         import openmdao.api as om
@@ -64,8 +265,10 @@ class TestCMAESDriver(unittest.TestCase):
                                   upper=span * np.ones(ORDER))
         prob.model.add_objective('rastrigin.y')
 
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        prob.driver = GenericDriver(algorithm=DifferentialEvolution(max_gen=400, Pc=.5, F=.5))
+        # prob.driver.options['max_gen'] = 400
+        # prob.driver.options['Pc'] = 0.5
+        # prob.driver.options['F'] = 0.5
 
         prob.setup()
         prob.run_driver()
@@ -103,8 +306,8 @@ class TestCMAESDriver(unittest.TestCase):
                                   upper=span * np.ones(ORDER))
         prob.model.add_objective('rosenbrock.y')
 
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        prob.driver = GenericDriver(algorithm=DifferentialEvolution(max_gen=800))
+        # prob.driver.options['max_gen'] = 800
 
         prob.setup()
         prob.run_driver()
@@ -150,13 +353,10 @@ class TestCMAESDriver(unittest.TestCase):
         prob.model.add_design_var('x', lower=np.array([0.2, -1.0]), upper=np.array([1.0, -0.2]))
         prob.model.add_objective('obj.f')
 
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        prob.driver = GenericDriver(algorithm=DifferentialEvolution(max_gen=75))
+        # prob.driver.options['max_gen'] = 75
 
         prob.setup()
-
-        prob.set_val('x', np.array([.5, -.5]))
-
         prob.run_driver()
 
         if extra_prints:
@@ -182,9 +382,7 @@ class TestCMAESDriver(unittest.TestCase):
         prob.model.add_design_var('x', lower=-5.0, upper=10.0)
         prob.model.add_objective('comp.f')
 
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['popsize'] = 25
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        prob.driver = om.DifferentialEvolutionDriver(max_gen=75, pop_size=25)
 
         prob.setup()
         # prob.run_driver()
@@ -205,19 +403,13 @@ class TestCMAESDriver(unittest.TestCase):
         prob.model.connect('indeps.x', 'paraboloid1.x')
         prob.model.connect('indeps.y', 'paraboloid2.y')
 
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        prob.driver = GenericDriver(algorithm=DifferentialEvolution())
 
         prob.model.add_design_var('indeps.x', lower=-5, upper=5)
         prob.model.add_design_var('indeps.y', lower=[-10, 0], upper=[10, 3])
         prob.model.add_objective('paraboloid1.f')
         prob.model.add_objective('paraboloid2.f')
-
         prob.setup()
-
-        prob.set_val('indeps.x', 3)
-        prob.set_val('indeps.y', np.ones(2,))
-
         prob.run_driver()
 
         if extra_prints:
@@ -227,14 +419,13 @@ class TestCMAESDriver(unittest.TestCase):
         np.testing.assert_array_almost_equal(prob['indeps.x'], -5)
         np.testing.assert_array_almost_equal(prob['indeps.y'], [3, 1])
 
-    def test_CMAESDriver_missing_objective(self):
+    def test_DifferentialEvolutionDriver_missing_objective(self):
         prob = om.Problem()
 
         prob.model.add_subsystem('x', om.IndepVarComp('x', 2.0), promotes=['*'])
         prob.model.add_subsystem('f_x', Paraboloid(), promotes=['*'])
 
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        prob.driver = GenericDriver(algorithm=DifferentialEvolution())
 
         prob.model.add_design_var('x', lower=0)
         prob.model.add_constraint('x', lower=0)
@@ -258,8 +449,7 @@ class TestCMAESDriver(unittest.TestCase):
         prob.model.add_subsystem('f_x', om.ExecComp('f_x = sum(x * x)', x=np.ones(dim), f_x=1.0), promotes=['*'])
         prob.model.add_subsystem('g_x', om.ExecComp('g_x = 1 - x', x=np.ones(dim), g_x=np.zeros(dim)), promotes=['*'])
 
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        prob.driver = GenericDriver(algorithm=DifferentialEvolution())
 
         prob.model.add_design_var('x', lower=-10, upper=10)
         prob.model.add_objective('f_x')
@@ -276,10 +466,34 @@ class TestCMAESDriver(unittest.TestCase):
             self.assertLessEqual(1.0 - 1e-6, prob["x"][i])
 
 
-class TestMultiObjectiveCMAESDriver(unittest.TestCase):
-
+class TestDriverOptionsDifferentialEvolution(unittest.TestCase):
     def setUp(self):
-        os.environ['CMAESDriver_seed'] = '11'
+        os.environ['DifferentialEvolution_seed'] = '11'
+
+    def test_driver_options(self):
+        """Tests if F and Pc options can be set."""
+        prob = om.Problem()
+
+        indeps = prob.model.add_subsystem('indeps', om.IndepVarComp(), promotes=['*'])
+        indeps.add_output('x', 1.)
+
+        prob.model.add_subsystem('model', om.ExecComp('y=x**2'), promotes=['*'])
+
+        prob.driver = GenericDriver(algorithm=DifferentialEvolution(F=.123, Pc=.0123, max_gen=5))
+        # prob.driver.options['F'] = 0.123
+        # prob.driver.options['Pc'] = 0.0123
+        # prob.driver.options['max_gen'] = 5
+
+        prob.model.add_design_var('x', lower=-10., upper=10.)
+        prob.model.add_objective('y')
+
+        prob.setup()
+        prob.run_driver()
+
+
+class TestMultiObjectiveDifferentialEvolution(unittest.TestCase):
+    def setUp(self):
+        os.environ['DifferentialEvolution_seed'] = '11'
 
     def test_multi_obj(self):
         class Box(om.ExplicitComponent):
@@ -312,9 +526,8 @@ class TestMultiObjectiveCMAESDriver(unittest.TestCase):
         indeps.add_output('height', 1.5)
 
         # setup the optimization
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
-
+        prob.driver = GenericDriver(algorithm=DifferentialEvolution(max_gen=100))
+        # prob.driver.options['max_gen'] = 100
         prob.driver.options['multi_obj_exponent'] = 1.
         prob.driver.options['penalty_parameter'] = 10.
         prob.driver.options['multi_obj_weights'] = {'box.front_area': 0.1,
@@ -354,9 +567,8 @@ class TestMultiObjectiveCMAESDriver(unittest.TestCase):
         indeps2.add_output('height', 1.5)
 
         # setup the optimization
-        prob2.driver = CMAESDriver()
-        prob2.driver.CMAOptions['verbose'] = -9  # silence output
-
+        prob2.driver = GenericDriver(algorithm=DifferentialEvolution(max_gen=100))
+        # prob2.driver.options['max_gen'] = 100
         prob2.driver.options['multi_obj_exponent'] = 1.
         prob2.driver.options['penalty_parameter'] = 10.
         prob2.driver.options['multi_obj_weights'] = {'box.front_area': 0.9,
@@ -373,7 +585,6 @@ class TestMultiObjectiveCMAESDriver(unittest.TestCase):
         # run #1
         prob2.setup()
         prob2.run_driver()
-
         front2 = prob2['front_area']
         top2 = prob2['top_area']
         l2 = prob2['length']
@@ -389,10 +600,9 @@ class TestMultiObjectiveCMAESDriver(unittest.TestCase):
         self.assertGreater(h2, h1)  # top area does not depend on height
 
 
-class TestConstrainedCMAESDriver(unittest.TestCase):
-
+class TestConstrainedDifferentialEvolution(unittest.TestCase):
     def setUp(self):
-        os.environ['CMAESDriver_seed'] = '11'
+        os.environ['DifferentialEvolution_seed'] = '11'
 
     def test_constrained_with_penalty(self):
         class Cylinder(om.ExplicitComponent):
@@ -420,11 +630,10 @@ class TestConstrainedCMAESDriver(unittest.TestCase):
         indeps.add_output('height', 3.)  # radius
 
         # setup the optimization
-        driver = prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
-
+        driver = prob.driver = GenericDriver(algorithm=DifferentialEvolution(max_gen=50))
         prob.driver.options['penalty_parameter'] = 3.
         prob.driver.options['penalty_exponent'] = 1.
+        # prob.driver.options['max_gen'] = 50
 
         prob.model.add_design_var('radius', lower=0.5, upper=5.)
         prob.model.add_design_var('height', lower=0.5, upper=5.)
@@ -442,7 +651,6 @@ class TestConstrainedCMAESDriver(unittest.TestCase):
 
         self.assertTrue(driver.supports["equality_constraints"], True)
         self.assertTrue(driver.supports["inequality_constraints"], True)
-
         # check that it is not going to the unconstrained optimum
         self.assertGreater(prob['radius'], 1.)
         self.assertGreater(prob['height'], 1.)
@@ -453,15 +661,14 @@ class TestConstrainedCMAESDriver(unittest.TestCase):
         indeps = prob.model.add_subsystem('indeps', om.IndepVarComp(), promotes=['*'])
 
         # setup the optimization
-        driver = prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        driver = prob.driver = GenericDriver(algorithm=DifferentialEvolution())
 
         with self.assertRaises(KeyError) as raises_msg:
             prob.driver.supports['equality_constraints'] = False
 
         exception = raises_msg.exception
 
-        msg = "CMAESDriver: Tried to set read-only option 'equality_constraints'."
+        msg = "GenericDriver: Tried to set read-only option 'equality_constraints'."
 
         self.assertEqual(exception.args[0], msg)
 
@@ -491,11 +698,10 @@ class TestConstrainedCMAESDriver(unittest.TestCase):
         indeps.add_output('height', 3.)  # radius
 
         # setup the optimization
-        driver = prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
-
+        driver = prob.driver = GenericDriver(algorithm=DifferentialEvolution(max_gen=50))
         prob.driver.options['penalty_parameter'] = 0.  # no penalty, same as unconstrained
         prob.driver.options['penalty_exponent'] = 1.
+        # prob.driver.options['max_gen'] = 50
 
         prob.model.add_design_var('radius', lower=0.5, upper=5.)
         prob.model.add_design_var('height', lower=0.5, upper=5.)
@@ -543,11 +749,10 @@ class TestConstrainedCMAESDriver(unittest.TestCase):
         indeps.add_output('height', 3.)  # radius
 
         # setup the optimization
-        driver = prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
-
+        driver = prob.driver = GenericDriver(algorithm=DifferentialEvolution(max_gen=50))
         prob.driver.options['penalty_parameter'] = 10.  # will have no effect
         prob.driver.options['penalty_exponent'] = 1.
+        # prob.driver.options['max_gen'] = 50
 
         prob.model.add_design_var('radius', lower=0.5, upper=5.)
         prob.model.add_design_var('height', lower=0.5, upper=5.)
@@ -569,20 +774,137 @@ class TestConstrainedCMAESDriver(unittest.TestCase):
 
 
 @unittest.skipUnless(MPI and PETScVector, "MPI and PETSc are required.")
-class MPITestCMAESDriver4Procs(unittest.TestCase):
+class MPITestDifferentialEvolution(unittest.TestCase):
+    N_PROCS = 2
+
+    def setUp(self):
+        os.environ['DifferentialEvolution_seed'] = '11'
+
+    def test_mpi_bug_solver(self):
+        # This test verifies that mpi doesn't hang due to collective calls in the solver.
+        prob = om.Problem()
+        prob.model = SellarMDA()
+
+        prob.model.add_design_var('x', lower=0, upper=10)
+        prob.model.add_design_var('z', lower=0, upper=10)
+        prob.model.add_objective('obj')
+
+        prob.driver = om.DifferentialEvolutionDriver(run_parallel=True)
+
+        # Set these low because we don't need to run long.
+        prob.driver.options['max_gen'] = 2
+        prob.driver.options['pop_size'] = 5
+
+        prob.setup()
+        prob.set_solver_print(level=0)
+
+        prob.run_driver()
+
+
+class D1(om.ExplicitComponent):
+    def initialize(self):
+        self.options['distributed'] = True
+
+    def setup(self):
+        comm = self.comm
+        rank = comm.rank
+
+        if rank == 1:
+            start = 1
+            end = 2
+        else:
+            start = 0
+            end = 1
+
+        self.add_input('y2', np.ones((1, ), float),
+                       src_indices=np.arange(start, end, dtype=int))
+        self.add_input('x', np.ones((1, ), float))
+
+        self.add_output('y1', np.ones((1, ), float))
+
+        self.declare_partials('y1', ['y2', 'x'])
+
+    def compute(self, inputs, outputs):
+        y2 = inputs['y2']
+        x = inputs['x']
+
+        if self.comm.rank == 1:
+            outputs['y1'] = 18.0 - 0.2*y2 + 2*x
+        else:
+            outputs['y1'] = 28.0 - 0.2*y2 + x
+
+    def compute_partials(self, inputs, partials, discrete_inputs=None):
+        y2 = inputs['y2']
+        x = inputs['x']
+
+        partials['y1', 'y2'] = -0.2
+        if self.comm.rank == 1:
+            partials['y1', 'x'] = 2.0
+        else:
+            partials['y1', 'x'] = 1.0
+
+
+class D2(om.ExplicitComponent):
+    def initialize(self):
+        self.options['distributed'] = True
+
+    def setup(self):
+        comm = self.comm
+        rank = comm.rank
+
+        if rank == 1:
+            start = 1
+            end = 2
+        else:
+            start = 0
+            end = 1
+
+        self.add_input('y1', np.ones((1, ), float),
+                       src_indices=np.arange(start, end, dtype=int))
+
+        self.add_output('y2', np.ones((1, ), float))
+
+        self.declare_partials('y2', ['y1'])
+
+    def compute(self, inputs, outputs):
+        y1 = inputs['y1']
+
+        if self.comm.rank == 1:
+            outputs['y2'] = y2 = y1**.5 - 3
+        else:
+            outputs['y2'] = y1**.5 + 7
+
+    def compute_partials(self, inputs, partials, discrete_inputs=None):
+        y1 = inputs['y1']
+
+        partials['y2', 'y1'] = 0.5 / y1**.5
+
+
+class Summer(om.ExplicitComponent):
+    def setup(self):
+        self.add_input('y1', val=np.zeros((2, )))
+        self.add_input('y2', val=np.zeros((2, )))
+        self.add_output('obj', 0.0, shape=1)
+
+        self.declare_partials('obj', 'y1', rows=np.array([0, 0]), cols=np.array([0, 1]), val=np.ones((2, )))
+
+    def compute(self, inputs, outputs):
+        outputs['obj'] = np.sum(inputs['y1']) + np.sum(inputs['y2'])
+
+
+@unittest.skipUnless(MPI and PETScVector, "MPI and PETSc are required.")
+class MPITestDifferentialEvolution4Procs(unittest.TestCase):
     N_PROCS = 4
 
     def setUp(self):
-        os.environ['CMAESDriver_seed'] = '11'
+        os.environ['DifferentialEvolution_seed'] = '11'
 
     def test_indivisible_error(self):
         prob = om.Problem()
         model = prob.model
         model.add_subsystem('par', om.ParallelGroup())
 
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
-
+        prob.driver = GenericDriver(algorithm=DifferentialEvolution())
         prob.driver.options['run_parallel'] = True
         prob.driver.options['procs_per_model'] = 3
 
@@ -596,8 +918,8 @@ class MPITestCMAESDriver4Procs(unittest.TestCase):
                          "of processors per model that divides into 4.")
 
     def test_concurrent_eval_padded(self):
-        # This test only makes sure we don't lock up if we overallocate
-        # our integer desvar space to the next power of 2.
+        # This test only makes sure we don't lock up if we overallocate our integer desvar space
+        # to the next power of 2.
 
         class GAGroup(om.Group):
 
@@ -616,15 +938,42 @@ class MPITestCMAESDriver4Procs(unittest.TestCase):
         prob = om.Problem()
         prob.model = GAGroup()
 
-        driver = prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
-        prob.driver.CMAOptions['popsize'] = 40
-
+        driver = prob.driver = GenericDriver(algorithm=DifferentialEvolution(max_gen=5, pop_size=40))
+        # driver.options['max_gen'] = 5
+        # driver.options['pop_size'] = 40
         driver.options['run_parallel'] = True
 
         prob.setup()
 
         # No meaningful result from a short run; just make sure we don't hang.
+        prob.run_driver()
+
+    def test_proc_per_model(self):
+        # Test that we can run a GA on a distributed component without lockups.
+        prob = om.Problem()
+        model = prob.model
+
+        model.add_subsystem('p', om.IndepVarComp('x', 3.0), promotes=['x'])
+
+        model.add_subsystem('d1', D1(), promotes=['*'])
+        model.add_subsystem('d2', D2(), promotes=['*'])
+
+        model.add_subsystem('obj_comp', Summer(), promotes=['*'])
+        model.nonlinear_solver = om.NewtonSolver(solve_subsystems=True)
+        model.linear_solver = om.LinearBlockGS()
+
+        model.add_design_var('x', lower=-0.5, upper=0.5)
+        model.add_objective('obj')
+
+        driver = prob.driver = GenericDriver(algorithm=DifferentialEvolution(pop_size=4, max_gen=3))
+        # prob.driver.options['pop_size'] = 4
+        # prob.driver.options['max_gen'] = 3
+        prob.driver.options['run_parallel'] = True
+        prob.driver.options['procs_per_model'] = 2
+
+        prob.setup()
+        prob.set_solver_print(level=0)
+
         prob.run_driver()
 
     def test_distributed_obj(self):
@@ -649,12 +998,11 @@ class MPITestCMAESDriver4Procs(unittest.TestCase):
         model.add_design_var('y', lower=-50.0, upper=50.0)
         model.add_objective('f_xy')
 
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
-        prob.driver.CMAOptions['popsize'] = 10
-
+        prob.driver = GenericDriver(algorithm=DifferentialEvolution(max_gen=250, pop_size=10))
         prob.driver.options['run_parallel'] = True
         prob.driver.options['procs_per_model'] = 2
+        # prob.driver.options['max_gen'] = 250
+        # prob.driver.options['pop_size'] = 10
 
         prob.setup()
         prob.run_driver()
@@ -663,20 +1011,16 @@ class MPITestCMAESDriver4Procs(unittest.TestCase):
         # x =    [ 6.66667,  5.86667,  5.06667]
         # y =    [-7.33333, -6.93333, -6.53333]
         # f_xy = [-27.3333, -23.0533, -19.0133]  mean f_xy = -23.1333
+        assert_near_equal(prob.get_val('x', get_remote=True),    [ 6.66667,  5.86667,  5.06667], 1e-3)
+        assert_near_equal(prob.get_val('y', get_remote=True),    [-7.33333, -6.93333, -6.53333], 1e-3)
+        assert_near_equal(prob.get_val('f_xy', get_remote=True), [-27.3333, -23.0533, -19.0133], 1e-3)
+        assert_near_equal(np.sum(prob.get_val('f_xy', get_remote=True))/3, -23.1333, 1e-4)
 
-        # assert_near_equal(prob.get_val('x', get_remote=True),    [ 6.66667,  5.86667,  5.06667], 1e-3)
-        # assert_near_equal(prob.get_val('y', get_remote=True),    [-7.33333, -6.93333, -6.53333], 1e-3)
-        # assert_near_equal(prob.get_val('f_xy', get_remote=True), [-27.3333, -23.0533, -19.0133], 1e-3)
-        # assert_near_equal(np.sum(prob.get_val('f_xy', get_remote=True))/3, -23.1333, 1e-4)
 
-        if extra_prints:
-            print('f_xy', prob.get_val('f_xy'))
-            print('x', prob.get_val('x'))
-            print('y', prob.get_val('y'))
-
-class TestFeatureCMAESDriver(unittest.TestCase):
+class TestFeatureDifferentialEvolution(unittest.TestCase):
     def setUp(self):
-        os.environ['CMAESDriver_seed'] = '11'
+        import os  # import needed in setup for tests in documentation
+        os.environ['DifferentialEvolution_seed'] = '11'
 
     def test_basic(self):
         prob = om.Problem()
@@ -688,8 +1032,7 @@ class TestFeatureCMAESDriver(unittest.TestCase):
         model.add_design_var('xC', lower=0.0, upper=15.0)
         model.add_objective('comp.f')
 
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        prob.driver = GenericDriver(algorithm=DifferentialEvolution())
 
         prob.setup()
         prob.run_driver()
@@ -704,14 +1047,32 @@ class TestFeatureCMAESDriver(unittest.TestCase):
         model.add_design_var('xC', lower=0.0, upper=15.0)
         model.add_objective('comp.f')
 
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        prob.driver = GenericDriver(algorithm=DifferentialEvolution())
 
         prob.setup()
         prob.run_driver()
 
         # Optimal solution (actual optimum, not the optimal with integer inputs as found by SimpleGA)
         assert_near_equal(prob['comp.f'], 0.397887, 1e-4)
+
+    def test_option_max_gen(self):
+        import openmdao.api as om
+        from openmdao.test_suite.components.branin import Branin
+
+        prob = om.Problem()
+        model = prob.model
+
+        model.add_subsystem('comp', Branin(), promotes_inputs=[('x0', 'xI'), ('x1', 'xC')])
+
+        model.add_design_var('xI', lower=-5.0, upper=10.0)
+        model.add_design_var('xC', lower=0.0, upper=15.0)
+        model.add_objective('comp.f')
+
+        prob.driver = GenericDriver(algorithm=DifferentialEvolution(max_gen=5))
+        # prob.driver.options['max_gen'] = 5
+
+        prob.setup()
+        prob.run_driver()
 
     def test_option_pop_size(self):
         import openmdao.api as om
@@ -726,9 +1087,8 @@ class TestFeatureCMAESDriver(unittest.TestCase):
         model.add_design_var('xC', lower=0.0, upper=15.0)
         model.add_objective('comp.f')
 
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
-        prob.driver.CMAOptions['popsize'] = 10
+        prob.driver = GenericDriver(algorithm=DifferentialEvolution(pop_size=10))
+        # prob.driver.options['pop_size'] = 10
 
         prob.setup()
         prob.run_driver()
@@ -757,11 +1117,10 @@ class TestFeatureCMAESDriver(unittest.TestCase):
         prob.model.add_subsystem('cylinder', Cylinder(), promotes=['*'])
 
         # setup the optimization
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
-
+        prob.driver = GenericDriver(algorithm=DifferentialEvolution(max_gen=50))
         prob.driver.options['penalty_parameter'] = 3.
         prob.driver.options['penalty_exponent'] = 1.
+        # prob.driver.options['max_gen'] = 50
 
         prob.model.add_design_var('radius', lower=0.5, upper=5.)
         prob.model.add_design_var('height', lower=0.5, upper=5.)
@@ -782,7 +1141,7 @@ class MPIFeatureTests(unittest.TestCase):
     N_PROCS = 2
 
     def setUp(self):
-        os.environ['CMAESDriver_seed'] = '11'
+        os.environ['DifferentialEvolution_seed'] = '11'
 
     def test_option_parallel(self):
         prob = om.Problem()
@@ -799,8 +1158,8 @@ class MPIFeatureTests(unittest.TestCase):
         model.add_design_var('p1.xC', lower=0.0, upper=15.0)
         model.add_objective('comp.f')
 
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        prob.driver = GenericDriver(algorithm=DifferentialEvolution(max_gen=10))
+        # prob.driver.options['max_gen'] = 10
         prob.driver.options['run_parallel'] = True
 
         prob.setup()
@@ -818,14 +1177,14 @@ class MPIFeatureTests4(unittest.TestCase):
     N_PROCS = 4
 
     def setUp(self):
-        os.environ['CMAESDriver_seed'] = '11'
+        os.environ['DifferentialEvolution_seed'] = '11'
 
     def test_option_procs_per_model(self):
         prob = om.Problem()
         model = prob.model
 
-        model.add_subsystem('p1', om.IndepVarComp('xC', 2.5))
-        model.add_subsystem('p2', om.IndepVarComp('xI', 3.0))
+        model.add_subsystem('p1', om.IndepVarComp('xC', 7.5))
+        model.add_subsystem('p2', om.IndepVarComp('xI', 0.0))
         par = model.add_subsystem('par', om.ParallelGroup())
 
         par.add_subsystem('comp1', Branin())
@@ -844,25 +1203,20 @@ class MPIFeatureTests4(unittest.TestCase):
         model.add_design_var('p1.xC', lower=0.0, upper=15.0)
         model.add_objective('comp.f')
 
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['popsize'] = 25
-
+        prob.driver = GenericDriver(algorithm=DifferentialEvolution(max_gen=10, pop_size=25))
+        # prob.driver.options['max_gen'] = 10
+        # prob.driver.options['pop_size'] = 25
         prob.driver.options['run_parallel'] = True
         prob.driver.options['procs_per_model'] = 2
 
         prob.setup()
-
         prob.run_driver()
 
-        # Optimal solution from DifferentialEvolutionDriver:
-        #   comp.f [0.80220303]
-        #   p2.xI [3.11628575]
-        #   p1.xC [2.28300608]
-
+        # Optimal solution
         if extra_prints:
-            print('comp.f', prob.get_val('comp.f'))
-            print('p2.xI', prob.get_val('p2.xI'))
-            print('p1.xC', prob.get_val('p1.xC'))
+            print('comp.f', prob['comp.f'])
+            print('p2.xI', prob['p2.xI'])
+            print('p1.xC', prob['p1.xC'])
 
 
 if __name__ == "__main__":

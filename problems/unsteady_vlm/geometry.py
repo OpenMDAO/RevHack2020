@@ -1,12 +1,11 @@
 """ Manipulate geometry mesh based on high-level design parameters. """
 
-from __future__ import division
 import numpy
 from numpy import cos, sin, tan
 
-from openmdao.api import Component
+import openmdao.api as om
 
-from b_spline import get_bspline_mtx
+from bspline import get_bspline_mtx
 from crm_data import crm_base_mesh
 
 
@@ -51,7 +50,7 @@ def sweep(mesh, angle):
     dx_left = -(le[:ny2, 1] - y0) * tan_theta
     dx = numpy.hstack((dx_left, dx_right))
 
-    for i in xrange(num_x):
+    for i in range(num_x):
         mesh[i, :, 0] += dx
 
     return mesh
@@ -73,7 +72,7 @@ def dihedral(mesh, angle):
     dx_left = -(le[:ny2, 1] - y0) * tan_theta
     dx = numpy.hstack((dx_left, dx_right))
 
-    for i in xrange(num_x):
+    for i in range(num_x):
         mesh[i, :, 2] += dx
 
     return mesh
@@ -90,7 +89,7 @@ def stretch(mesh, length):
     span = le[-1, 1] - le[0, 1]
     dy = (length - span) / (num_y - 1) * numpy.arange(1, num_y)
 
-    for i in xrange(num_x):
+    for i in range(num_x):
         mesh[i, 1:, 1] += dy
 
     return mesh
@@ -109,12 +108,12 @@ def taper(mesh, taper_ratio):
     taper = numpy.linspace(1, taper_ratio, ny2)[::-1]
 
     jac = get_bspline_mtx(ny2, ny2, mesh, order=2)
-    taper = jac.dot(taper)
+    taper = jac.dot(taper).flatten()
 
     dx = numpy.hstack((taper, taper[::-1][1:]))
 
-    for i in xrange(num_x):
-        for ind in xrange(3):
+    for i in range(num_x):
+        for ind in range(3):
             mesh[i, :, ind] = (mesh[i, :, ind] - center_chord[:, ind]) * \
                 dx + center_chord[:, ind]
 
@@ -167,7 +166,7 @@ def gen_crm_mesh(n_points_inboard=2, n_points_outboard=2, num_x=2, mesh=crm_base
 
     # generate inboard points
     dy = (mesh[0, 1, 1] - mesh[0, 0, 1]) / (n_points_inboard - 1)
-    for i in xrange(n_points_inboard):
+    for i in range(n_points_inboard):
         y = half_mesh[0, i, 1] = i * dy
         half_mesh[0, i, 0] = s1 * y + o1 # le point
         half_mesh[1, i, 1] = y
@@ -176,7 +175,7 @@ def gen_crm_mesh(n_points_inboard=2, n_points_outboard=2, num_x=2, mesh=crm_base
     yehudi_break = mesh[0, 1, 1]
     # generate outboard points
     dy = (mesh[0, 2, 1] - mesh[0, 1, 1]) / (n_points_outboard - 1)
-    for j in xrange(n_points_outboard):
+    for j in range(n_points_outboard):
         i = j + n_points_inboard - 1
         y = half_mesh[0, i, 1] = j * dy + yehudi_break
         half_mesh[0, i, 0] = s3 * y + o3 # le point
@@ -197,7 +196,7 @@ def add_chordwise_panels(mesh, num_x):
     new_mesh[ 0, :, :] = le
     new_mesh[-1, :, :] = te
 
-    for i in xrange(1, num_x-1):
+    for i in range(1, num_x-1):
         w = float(i) / (num_x - 1)
         new_mesh[i, :, :] = (1 - w) * le + w * te
 
@@ -207,7 +206,7 @@ def add_chordwise_panels(mesh, num_x):
 def gen_mesh(num_x, num_y, span, chord, cosine_spacing=0.):
     """ Builds the right hand side of the rectangular wing. """
     mesh = numpy.zeros((num_x, num_y, 3))
-    ny2 = (num_y + 1) / 2
+    ny2 = (num_y + 1) // 2
     beta = numpy.linspace(0, numpy.pi/2, ny2)
 
     # mixed spacing with w as a weighting factor
@@ -216,48 +215,49 @@ def gen_mesh(num_x, num_y, span, chord, cosine_spacing=0.):
     half_wing = cosine * cosine_spacing + (1 - cosine_spacing) * uniform
     full_wing = numpy.hstack((-half_wing[:-1], half_wing[::-1])) * span
 
-    for ind_x in xrange(num_x):
-        for ind_y in xrange(num_y):
+    for ind_x in range(num_x):
+        for ind_y in range(num_y):
             mesh[ind_x, ind_y, :] = [ind_x / (num_x-1) * chord - chord/2., full_wing[ind_y], 0]
 
     return mesh
 
 
-class GeometryMesh(Component):
+class GeometryMesh(om.ExplicitComponent):
     """ Changes a given mesh with span, swee3p, and twist des-vars.
     Takes in a half mesh with symmetry plane about the middle and
     outputs a full symmetric mesh. """
 
-    def __init__(self, mesh, num_twist):
-        super(GeometryMesh, self).__init__()
+    def initialize(self):
+        self.options.declare("mesh")
+        self.options.declare("num_twist")
 
-        self.mesh = mesh
-        self.num_twist = num_twist
+    def setup(self):
+        self.mesh = mesh = self.options["mesh"]
+        self.num_twist = num_twist = self.options["num_twist"]
 
         self.new_mesh = numpy.empty(mesh.shape, dtype=complex)
         self.new_mesh[:] = mesh
         self.n = self.mesh.shape[1]
         self.half = half = int((self.n-1)/2)
-        self.add_param('span', val=58.7630524)
-        self.add_param('sweep', val=0.)
-        self.add_param('dihedral', val=0.)
-        self.add_param('twist', val=numpy.zeros(num_twist))
-        self.add_param('taper', val=1.)
+        self.add_input('span', val=58.7630524)
+        self.add_input('sweep', val=0.)
+        self.add_input('dihedral', val=0.)
+        self.add_input('twist', val=numpy.zeros(num_twist))
+        self.add_input('taper', val=1.)
         self.add_output('mesh', val=self.mesh[:, :half+1, :])
 
-        self.deriv_options['type'] = 'cs'
-        self.deriv_options['form'] = 'central'
-        #self.deriv_options['extra_check_partials_form'] = "central"
+    def setup_partials(self):
+        self.declare_partials(of='*', wrt='*', method='cs')
 
-    def solve_nonlinear(self, params, unknowns, resids):
+    def compute(self, inputs, outputs):
         jac = get_bspline_mtx(self.num_twist, self.n, self.mesh)
-        h_cp = params['twist']
+        h_cp = inputs['twist']
         h = jac.dot(h_cp)
 
         self.new_mesh[:] = self.mesh
-        stretch(self.new_mesh, params['span'])
-        sweep(self.new_mesh, params['sweep'])
+        stretch(self.new_mesh, inputs['span'])
+        sweep(self.new_mesh, inputs['sweep'])
         rotate(self.new_mesh, h)
-        dihedral(self.new_mesh, params['dihedral'])
-        taper(self.new_mesh, params['taper'])
-        unknowns['mesh'] = self.new_mesh[:, :self.half+1, :]
+        dihedral(self.new_mesh, inputs['dihedral'])
+        taper(self.new_mesh, inputs['taper'])
+        outputs['mesh'] = self.new_mesh[:, :self.half+1, :]

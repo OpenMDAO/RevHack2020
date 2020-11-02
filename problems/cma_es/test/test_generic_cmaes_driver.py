@@ -1,7 +1,9 @@
-""" Unit tests for the CMAES Driver, mirroring tests for DifferentialEvolutionDriver. """
+""" Unit tests for generic CMAES Driver, mirroring tests for DifferentialEvolutionDriver. """
 
 import unittest
 import os
+
+import time
 
 import numpy as np
 
@@ -12,10 +14,12 @@ from openmdao.test_suite.components.paraboloid_distributed import DistParab
 from openmdao.test_suite.components.sellar_feature import SellarMDA
 from openmdao.test_suite.components.three_bar_truss import ThreeBarTruss
 
-from openmdao.utils.assert_utils import assert_near_equal
 from openmdao.utils.mpi import MPI
+from openmdao.utils.concurrent import concurrent_eval
+from openmdao.utils.assert_utils import assert_near_equal
 
-from cmaes_driver import CMAESDriver
+from generic_driver import GenericDriver, DriverAlgorithm
+import cma
 
 try:
     from openmdao.vectors.petsc_vector import PETScVector
@@ -23,6 +27,136 @@ except ImportError:
     PETScVector = None
 
 extra_prints = True  # enable printing results
+
+
+class CMAES(DriverAlgorithm):
+    """
+    CMA Evolution Strategy.
+
+    Attributes
+    ----------
+    comm : MPI communicator or None
+        The MPI communicator that will be used objective evaluation for each generation.
+    model_mpi : None or tuple
+        If the model in objfun is also parallel, then this will contain a tuple with the the
+        total number of population points to evaluate concurrently, and the color of the point
+        to evaluate on this rank.
+    objfun : function
+        Objective function callback.
+    sigma0 : float
+        Initial standard deviation in each coordinate.
+    options : CMAOptions
+        Options for CMAES execution.
+    """
+
+    def __init__(self, sigma0=.1):
+        """
+        Initialize CMA Evolution Strategy object.
+
+        Parameters
+        ----------
+        sigma0 : float
+            Initial standard deviation in each coordinate.
+        """
+        self.sigma0 = sigma0
+        self.options = cma.CMAOptions()
+
+    def execute(self, x0, vlb, vub, objfun, comm=None, model_mpi=None):
+        """
+        Execute the CMA Evolution Strategy.
+
+        Parameters
+        ----------
+        x0 : ndarray
+            Initial design values
+        vlb : ndarray
+            Lower bounds array.
+        vub : ndarray
+            Upper bounds array.
+        objfun : function
+            Objective callback function.
+        comm : MPI communicator or None
+            The MPI communicator that will be used objective evaluation.
+        model_mpi : None or tuple
+            If the model in objfun is also parallel, then this will contain a tuple with the the
+            total number of population points to evaluate concurrently, and the color of the point
+            to evaluate on this rank.
+
+        Returns
+        -------
+        ndarray
+            Best design point
+        float
+            Objective value at best design point.
+        """
+        self.options['bounds'] = [vlb, vub]
+
+        if comm is None:
+            # Running non-parallel, use functional interface
+
+            res = cma.fmin(objfun, x0, self.sigma0, options=self.options)
+
+            return res[0], res[1]
+
+        else:
+            # Running parallel, use OO interface
+
+            # make sure all procs have the same seed
+            seed = self.options['seed']
+            if comm.rank == 0 and (not isinstance(seed, int) or seed == 0):
+                seed = int(time.time())
+            self.options['seed'] = comm.bcast(seed, root=0)
+
+            optim = cma.CMAEvolutionStrategy(x0, self.sigma0, self.options)
+
+            stop = False
+
+            while not stop:  # optim.stop():
+                # get candidate solutions
+                X = optim.ask()
+
+                # pad candidates to make them divisible into procs.
+                cases = [((item, ), None) for ii, item in enumerate(X)]
+                extra = len(cases) % comm.size
+                if extra > 0:
+                    for j in range(comm.size - extra):
+                        cases.append(cases[-1])
+
+                # evaluate candidate solutions concurrently
+                results = concurrent_eval(objfun, cases, comm,
+                                          allgather=True, model_mpi=model_mpi)
+
+                # assemble solutions corresponding to X
+                f = []
+                for i in range(len(X)):
+                    returns, traceback = results[i]
+                    if returns:
+                        # fval, success = returns
+                        f.append(returns)
+                    else:
+                        # Print the traceback if it fails
+                        print('A case failed:')
+                        print(traceback)
+
+                # do the "update", pass f-values and prepare for next iteration
+                optim.tell(X, f)
+                optim.disp(20)       # display info every 20th iteration
+                optim.logger.add()   # log another "data line", non-standard
+
+                # gather stop conditions, stop if any proc stops
+                # (all procs should stop with same stop condition)
+                stops = comm.allgather(optim.stop())
+                for proc_stop in stops:
+                    if len(proc_stop) > 0:
+                        stop = True
+
+            # final output
+            # print('termination by', stops)
+            # print('best f-value =', optim.result[1])
+            # print('best solution =', optim.result[0])
+            # optim.logger.plot()  # if matplotlib is available
+
+            return optim.result[0], optim.result[1]
 
 
 class TestCMAESDriver(unittest.TestCase):
@@ -64,8 +198,10 @@ class TestCMAESDriver(unittest.TestCase):
                                   upper=span * np.ones(ORDER))
         prob.model.add_objective('rastrigin.y')
 
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        cma_es = CMAES()
+        cma_es.options['verbose'] = -9  # silence output
+
+        prob.driver = GenericDriver(algorithm=cma_es)
 
         prob.setup()
         prob.run_driver()
@@ -103,8 +239,10 @@ class TestCMAESDriver(unittest.TestCase):
                                   upper=span * np.ones(ORDER))
         prob.model.add_objective('rosenbrock.y')
 
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        cma_es = CMAES()
+        cma_es.options['verbose'] = -9  # silence output
+
+        prob.driver = GenericDriver(algorithm=cma_es)
 
         prob.setup()
         prob.run_driver()
@@ -150,8 +288,12 @@ class TestCMAESDriver(unittest.TestCase):
         prob.model.add_design_var('x', lower=np.array([0.2, -1.0]), upper=np.array([1.0, -0.2]))
         prob.model.add_objective('obj.f')
 
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        cma_es = CMAES()
+        cma_es.sigma0 = .1
+        # cma_es.options['verbose'] = -9  # silence output
+        cma_es.options['seed'] = 11
+
+        prob.driver = GenericDriver(algorithm=cma_es)
 
         prob.setup()
 
@@ -182,9 +324,11 @@ class TestCMAESDriver(unittest.TestCase):
         prob.model.add_design_var('x', lower=-5.0, upper=10.0)
         prob.model.add_objective('comp.f')
 
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['popsize'] = 25
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        cma_es = CMAES()
+        cma_es.options['popsize'] = 25
+        cma_es.options['verbose'] = -9  # silence output
+
+        prob.driver = GenericDriver(algorithm=cma_es)
 
         prob.setup()
         # prob.run_driver()
@@ -205,8 +349,10 @@ class TestCMAESDriver(unittest.TestCase):
         prob.model.connect('indeps.x', 'paraboloid1.x')
         prob.model.connect('indeps.y', 'paraboloid2.y')
 
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        cma_es = CMAES()
+        cma_es.options['verbose'] = -9  # silence output
+
+        prob.driver = GenericDriver(algorithm=cma_es)
 
         prob.model.add_design_var('indeps.x', lower=-5, upper=5)
         prob.model.add_design_var('indeps.y', lower=[-10, 0], upper=[10, 3])
@@ -233,8 +379,10 @@ class TestCMAESDriver(unittest.TestCase):
         prob.model.add_subsystem('x', om.IndepVarComp('x', 2.0), promotes=['*'])
         prob.model.add_subsystem('f_x', Paraboloid(), promotes=['*'])
 
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        cma_es = CMAES()
+        cma_es.options['verbose'] = -9  # silence output
+
+        prob.driver = GenericDriver(algorithm=cma_es)
 
         prob.model.add_design_var('x', lower=0)
         prob.model.add_constraint('x', lower=0)
@@ -258,8 +406,10 @@ class TestCMAESDriver(unittest.TestCase):
         prob.model.add_subsystem('f_x', om.ExecComp('f_x = sum(x * x)', x=np.ones(dim), f_x=1.0), promotes=['*'])
         prob.model.add_subsystem('g_x', om.ExecComp('g_x = 1 - x', x=np.ones(dim), g_x=np.zeros(dim)), promotes=['*'])
 
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        cma_es = CMAES()
+        cma_es.options['verbose'] = -9  # silence output
+
+        prob.driver = GenericDriver(algorithm=cma_es)
 
         prob.model.add_design_var('x', lower=-10, upper=10)
         prob.model.add_objective('f_x')
@@ -312,8 +462,10 @@ class TestMultiObjectiveCMAESDriver(unittest.TestCase):
         indeps.add_output('height', 1.5)
 
         # setup the optimization
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        cma_es = CMAES()
+        cma_es.options['verbose'] = -9  # silence output
+
+        prob.driver = GenericDriver(algorithm=cma_es)
 
         prob.driver.options['multi_obj_exponent'] = 1.
         prob.driver.options['penalty_parameter'] = 10.
@@ -354,8 +506,10 @@ class TestMultiObjectiveCMAESDriver(unittest.TestCase):
         indeps2.add_output('height', 1.5)
 
         # setup the optimization
-        prob2.driver = CMAESDriver()
-        prob2.driver.CMAOptions['verbose'] = -9  # silence output
+        cma_es = CMAES()
+        cma_es.options['verbose'] = -9  # silence output
+
+        prob2.driver = GenericDriver(algorithm=cma_es)
 
         prob2.driver.options['multi_obj_exponent'] = 1.
         prob2.driver.options['penalty_parameter'] = 10.
@@ -420,8 +574,10 @@ class TestConstrainedCMAESDriver(unittest.TestCase):
         indeps.add_output('height', 3.)  # radius
 
         # setup the optimization
-        driver = prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        cma_es = CMAES()
+        cma_es.options['verbose'] = -9  # silence output
+
+        prob.driver = GenericDriver(algorithm=cma_es)
 
         prob.driver.options['penalty_parameter'] = 3.
         prob.driver.options['penalty_exponent'] = 1.
@@ -440,8 +596,8 @@ class TestConstrainedCMAESDriver(unittest.TestCase):
             print('Area', prob['Area'])
             print('Volume', prob['Volume'])  # should be around 10
 
-        self.assertTrue(driver.supports["equality_constraints"], True)
-        self.assertTrue(driver.supports["inequality_constraints"], True)
+        self.assertTrue(prob.driver.supports["equality_constraints"], True)
+        self.assertTrue(prob.driver.supports["inequality_constraints"], True)
 
         # check that it is not going to the unconstrained optimum
         self.assertGreater(prob['radius'], 1.)
@@ -453,15 +609,17 @@ class TestConstrainedCMAESDriver(unittest.TestCase):
         indeps = prob.model.add_subsystem('indeps', om.IndepVarComp(), promotes=['*'])
 
         # setup the optimization
-        driver = prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        cma_es = CMAES()
+        cma_es.options['verbose'] = -9  # silence output
+
+        prob.driver = GenericDriver(algorithm=cma_es)
 
         with self.assertRaises(KeyError) as raises_msg:
             prob.driver.supports['equality_constraints'] = False
 
         exception = raises_msg.exception
 
-        msg = "CMAESDriver: Tried to set read-only option 'equality_constraints'."
+        msg = "GenericDriver: Tried to set read-only option 'equality_constraints'."
 
         self.assertEqual(exception.args[0], msg)
 
@@ -491,8 +649,10 @@ class TestConstrainedCMAESDriver(unittest.TestCase):
         indeps.add_output('height', 3.)  # radius
 
         # setup the optimization
-        driver = prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        cma_es = CMAES()
+        cma_es.options['verbose'] = -9  # silence output
+
+        prob.driver = GenericDriver(algorithm=cma_es)
 
         prob.driver.options['penalty_parameter'] = 0.  # no penalty, same as unconstrained
         prob.driver.options['penalty_exponent'] = 1.
@@ -511,11 +671,12 @@ class TestConstrainedCMAESDriver(unittest.TestCase):
             print('Area', prob['Area'])
             print('Volume', prob['Volume'])  # should be around 10
 
-        self.assertTrue(driver.supports["equality_constraints"], True)
-        self.assertTrue(driver.supports["inequality_constraints"], True)
+        self.assertTrue(prob.driver.supports["equality_constraints"], True)
+        self.assertTrue(prob.driver.supports["inequality_constraints"], True)
+
         # it is going to the unconstrained optimum
-        self.assertAlmostEqual(prob['radius'], 0.5, 1)
-        self.assertAlmostEqual(prob['height'], 0.5, 1)
+        assert_near_equal(prob['radius'], 0.5, 1e-6)
+        assert_near_equal(prob['height'], 0.5, 1e-6)
 
     def test_no_constraint(self):
         class Cylinder(om.ExplicitComponent):
@@ -543,8 +704,10 @@ class TestConstrainedCMAESDriver(unittest.TestCase):
         indeps.add_output('height', 3.)  # radius
 
         # setup the optimization
-        driver = prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        cma_es = CMAES()
+        cma_es.options['verbose'] = -9  # silence output
+
+        prob.driver = GenericDriver(algorithm=cma_es)
 
         prob.driver.options['penalty_parameter'] = 10.  # will have no effect
         prob.driver.options['penalty_exponent'] = 1.
@@ -562,10 +725,102 @@ class TestConstrainedCMAESDriver(unittest.TestCase):
             print('Area', prob['Area'])
             print('Volume', prob['Volume'])  # should be around 10
 
-        self.assertTrue(driver.supports["equality_constraints"], True)
-        self.assertTrue(driver.supports["inequality_constraints"], True)
-        self.assertAlmostEqual(prob['radius'], 0.5, 1)  # it is going to the unconstrained optimum
-        self.assertAlmostEqual(prob['height'], 0.5, 1)  # it is going to the unconstrained optimum
+        self.assertTrue(prob.driver.supports["equality_constraints"], True)
+        self.assertTrue(prob.driver.supports["inequality_constraints"], True)
+
+        assert_near_equal(prob['radius'], 0.5, 1e-6)  # it is going to the unconstrained optimum
+        assert_near_equal(prob['height'], 0.5, 1e-6)  # it is going to the unconstrained optimum
+
+
+class D1(om.ExplicitComponent):
+    def initialize(self):
+        self.options['distributed'] = True
+
+    def setup(self):
+        comm = self.comm
+        rank = comm.rank
+
+        if rank == 1:
+            start = 1
+            end = 2
+        else:
+            start = 0
+            end = 1
+
+        self.add_input('y2', np.ones((1, ), float),
+                       src_indices=np.arange(start, end, dtype=int))
+        self.add_input('x', np.ones((1, ), float))
+
+        self.add_output('y1', np.ones((1, ), float))
+
+        self.declare_partials('y1', ['y2', 'x'])
+
+    def compute(self, inputs, outputs):
+        y2 = inputs['y2']
+        x = inputs['x']
+
+        if self.comm.rank == 1:
+            outputs['y1'] = 18.0 - 0.2*y2 + 2*x
+        else:
+            outputs['y1'] = 28.0 - 0.2*y2 + x
+
+    def compute_partials(self, inputs, partials, discrete_inputs=None):
+        y2 = inputs['y2']
+        x = inputs['x']
+
+        partials['y1', 'y2'] = -0.2
+        if self.comm.rank == 1:
+            partials['y1', 'x'] = 2.0
+        else:
+            partials['y1', 'x'] = 1.0
+
+
+class D2(om.ExplicitComponent):
+    def initialize(self):
+        self.options['distributed'] = True
+
+    def setup(self):
+        comm = self.comm
+        rank = comm.rank
+
+        if rank == 1:
+            start = 1
+            end = 2
+        else:
+            start = 0
+            end = 1
+
+        self.add_input('y1', np.ones((1, ), float),
+                       src_indices=np.arange(start, end, dtype=int))
+
+        self.add_output('y2', np.ones((1, ), float))
+
+        self.declare_partials('y2', ['y1'])
+
+    def compute(self, inputs, outputs):
+        y1 = inputs['y1']
+
+        if self.comm.rank == 1:
+            outputs['y2'] = y2 = y1**.5 - 3
+        else:
+            outputs['y2'] = y1**.5 + 7
+
+    def compute_partials(self, inputs, partials, discrete_inputs=None):
+        y1 = inputs['y1']
+
+        partials['y2', 'y1'] = 0.5 / y1**.5
+
+
+class Summer(om.ExplicitComponent):
+    def setup(self):
+        self.add_input('y1', val=np.zeros((2, )))
+        self.add_input('y2', val=np.zeros((2, )))
+        self.add_output('obj', 0.0, shape=1)
+
+        self.declare_partials('obj', 'y1', rows=np.array([0, 0]), cols=np.array([0, 1]), val=np.ones((2, )))
+
+    def compute(self, inputs, outputs):
+        outputs['obj'] = np.sum(inputs['y1']) + np.sum(inputs['y2'])
 
 
 @unittest.skipUnless(MPI and PETScVector, "MPI and PETSc are required.")
@@ -580,8 +835,10 @@ class MPITestCMAESDriver4Procs(unittest.TestCase):
         model = prob.model
         model.add_subsystem('par', om.ParallelGroup())
 
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        cma_es = CMAES()
+        cma_es.options['verbose'] = -9  # silence output
+
+        prob.driver = GenericDriver(algorithm=cma_es)
 
         prob.driver.options['run_parallel'] = True
         prob.driver.options['procs_per_model'] = 3
@@ -616,15 +873,44 @@ class MPITestCMAESDriver4Procs(unittest.TestCase):
         prob = om.Problem()
         prob.model = GAGroup()
 
-        driver = prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
-        prob.driver.CMAOptions['popsize'] = 40
+        cma_es = CMAES()
+        cma_es.options['popsize'] = 40
+        cma_es.options['verbose'] = -9  # silence output
 
-        driver.options['run_parallel'] = True
+        prob.driver = GenericDriver(algorithm=cma_es)
+
+        prob.driver.options['run_parallel'] = True
 
         prob.setup()
 
         # No meaningful result from a short run; just make sure we don't hang.
+        prob.run_driver()
+
+    def test_proc_per_model(self):
+        # Test that we can run a GA on a distributed component without lockups.
+        prob = om.Problem()
+        model = prob.model
+
+        model.add_subsystem('p', om.IndepVarComp('x', 3.0), promotes=['x'])
+
+        model.add_subsystem('d1', D1(), promotes=['*'])
+        model.add_subsystem('d2', D2(), promotes=['*'])
+
+        model.add_subsystem('obj_comp', Summer(), promotes=['*'])
+        model.nonlinear_solver = om.NewtonSolver(solve_subsystems=True)
+        model.linear_solver = om.LinearBlockGS()
+
+        model.add_design_var('x', lower=-0.5, upper=0.5)
+        model.add_objective('obj')
+
+        prob.driver = GenericDriver(algorithm=CMAES())
+
+        prob.driver.options['run_parallel'] = True
+        prob.driver.options['procs_per_model'] = 2
+
+        prob.setup()
+        prob.set_solver_print(level=0)
+
         prob.run_driver()
 
     def test_distributed_obj(self):
@@ -649,9 +935,11 @@ class MPITestCMAESDriver4Procs(unittest.TestCase):
         model.add_design_var('y', lower=-50.0, upper=50.0)
         model.add_objective('f_xy')
 
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
-        prob.driver.CMAOptions['popsize'] = 10
+        cma_es = CMAES()
+        cma_es.options['popsize'] = 10
+        cma_es.options['verbose'] = -9  # silence output
+
+        prob.driver = GenericDriver(algorithm=cma_es)
 
         prob.driver.options['run_parallel'] = True
         prob.driver.options['procs_per_model'] = 2
@@ -664,15 +952,16 @@ class MPITestCMAESDriver4Procs(unittest.TestCase):
         # y =    [-7.33333, -6.93333, -6.53333]
         # f_xy = [-27.3333, -23.0533, -19.0133]  mean f_xy = -23.1333
 
-        # assert_near_equal(prob.get_val('x', get_remote=True),    [ 6.66667,  5.86667,  5.06667], 1e-3)
-        # assert_near_equal(prob.get_val('y', get_remote=True),    [-7.33333, -6.93333, -6.53333], 1e-3)
-        # assert_near_equal(prob.get_val('f_xy', get_remote=True), [-27.3333, -23.0533, -19.0133], 1e-3)
-        # assert_near_equal(np.sum(prob.get_val('f_xy', get_remote=True))/3, -23.1333, 1e-4)
+        assert_near_equal(prob.get_val('x', get_remote=True),    [ 6.66667,  5.86667,  5.06667], 1e-3)
+        assert_near_equal(prob.get_val('y', get_remote=True),    [-7.33333, -6.93333, -6.53333], 1e-3)
+        assert_near_equal(prob.get_val('f_xy', get_remote=True), [-27.3333, -23.0533, -19.0133], 1e-3)
+        assert_near_equal(np.sum(prob.get_val('f_xy', get_remote=True))/3, -23.1333, 1e-4)
 
         if extra_prints:
             print('f_xy', prob.get_val('f_xy'))
             print('x', prob.get_val('x'))
             print('y', prob.get_val('y'))
+
 
 class TestFeatureCMAESDriver(unittest.TestCase):
     def setUp(self):
@@ -688,8 +977,10 @@ class TestFeatureCMAESDriver(unittest.TestCase):
         model.add_design_var('xC', lower=0.0, upper=15.0)
         model.add_objective('comp.f')
 
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        cma_es = CMAES()
+        # cma_es.options['verbose'] = -9  # silence output
+
+        prob.driver = GenericDriver(algorithm=cma_es)
 
         prob.setup()
         prob.run_driver()
@@ -704,8 +995,10 @@ class TestFeatureCMAESDriver(unittest.TestCase):
         model.add_design_var('xC', lower=0.0, upper=15.0)
         model.add_objective('comp.f')
 
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        cma_es = CMAES()
+        cma_es.options['verbose'] = -9  # silence output
+
+        prob.driver = GenericDriver(algorithm=cma_es)
 
         prob.setup()
         prob.run_driver()
@@ -726,9 +1019,11 @@ class TestFeatureCMAESDriver(unittest.TestCase):
         model.add_design_var('xC', lower=0.0, upper=15.0)
         model.add_objective('comp.f')
 
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
-        prob.driver.CMAOptions['popsize'] = 10
+        cma_es = CMAES()
+        cma_es.options['popsize'] = 10
+        cma_es.options['verbose'] = -9  # silence output
+
+        prob.driver = GenericDriver(algorithm=cma_es)
 
         prob.setup()
         prob.run_driver()
@@ -757,8 +1052,10 @@ class TestFeatureCMAESDriver(unittest.TestCase):
         prob.model.add_subsystem('cylinder', Cylinder(), promotes=['*'])
 
         # setup the optimization
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        cma_es = CMAES()
+        cma_es.options['verbose'] = -9  # silence output
+
+        prob.driver = GenericDriver(algorithm=cma_es)
 
         prob.driver.options['penalty_parameter'] = 3.
         prob.driver.options['penalty_exponent'] = 1.
@@ -799,8 +1096,11 @@ class MPIFeatureTests(unittest.TestCase):
         model.add_design_var('p1.xC', lower=0.0, upper=15.0)
         model.add_objective('comp.f')
 
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['verbose'] = -9  # silence output
+        cma_es = CMAES()
+        cma_es.options['verbose'] = -9  # silence output
+
+        prob.driver = GenericDriver(algorithm=cma_es)
+
         prob.driver.options['run_parallel'] = True
 
         prob.setup()
@@ -844,8 +1144,11 @@ class MPIFeatureTests4(unittest.TestCase):
         model.add_design_var('p1.xC', lower=0.0, upper=15.0)
         model.add_objective('comp.f')
 
-        prob.driver = CMAESDriver()
-        prob.driver.CMAOptions['popsize'] = 25
+        cma_es = CMAES()
+        cma_es.options['popsize'] = 25
+        cma_es.options['verbose'] = -9  # silence output
+
+        prob.driver = GenericDriver(algorithm=cma_es)
 
         prob.driver.options['run_parallel'] = True
         prob.driver.options['procs_per_model'] = 2
