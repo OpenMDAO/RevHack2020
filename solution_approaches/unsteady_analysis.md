@@ -97,12 +97,12 @@ On the other hand, Shamsheer's original solution worked well, even if it was not
 Compute time is important, especially if you're developing a long term model that will get a lot of repeated use. 
 But time-to-solve is also important, and the compact and direct nature of Shamsheer's solution meant that he got to an answer much faster than he would have had he tried to split up the ODE and the integration. 
 
-How do we know he got to a solution faster? We'll, 
-because we weren't able to implement a time stepping approach that could do what the original problem did. 
-The analysis itself wasn't the problem, but complex-stepping through the time-loop was. 
+How do we know he got to a solution faster? 
+We weren't able to implement a time stepping approach that could do what the original problem did. 
+The analysis itself wasn't the problem [(here is an RK4 integrator that does the time integration)](../problems/evtol_trajectory/evtol_explicit_time_integraiton/time_step_rk4.py), but complex-stepping through the time-loop tripped us up. 
 There is not API accessible from the problem level to allow users complex-step across calls to `run_model`, 
 and hence we couldn't set up the optimization. 
-There was actually already a [POEM][cs-poem] up to propose that feature, even before RevHack2020, but its not quite ready to be accepted yet. 
+Before RevHack2020 there was already a [POEM][cs-poem] proposing that feature, but its not quite ready to be accepted yet. 
 
 Once that is ready, we'll add an example to OpenMDAO's docs on how to do this. 
 We'll also add the time-stepping type integration to Dymos as well. 
