@@ -88,14 +88,21 @@ These solutions found the same answer as the original waterfall style solution, 
 
 ### What about a time-stepping solution
 
-We are working on this, and we'll come back and provide a solution that shows it. 
-Our approach to this is different than the waterfall methods.
-We'll use the same ODE class as in our Dymos based solutions, but we'll stick it into a [sub-problem][subproblem], wrap the time integration around that and then put that whole thing into its own component. 
+This one was really a mixed bag for the dev team.  
+On the one hand, we don't feel like the approach that Shamsheer took in his original implementation is the right one. 
+He build the Euler for loop into his component which, while simpler and more compact, couples the code for the time integration to the ODE itself. 
+Our objection lies in that coupling, because we feel it prevents you from growing into more efficient integration methods later on. 
 
-We ran out of time to get this implemented, because we ran into a couple of complications with OpenMDAO V3.4. 
-We wanted to retain the use of complex-step similar to the original solution method, but OpenMDAO V3.4 doesn't provide a problem-API level way to achieve that. 
-So we're taking that on as a follow on effort once we add the feature to OpenMDAO. 
-There was actually already a [POEM][cs-poem] up to propose that feature, even before RevHack, but its not quite ready to be accepted yet. 
+On the other hand, Shamsheer's original solution worked well, even if it was not the most computationally efficient approach. 
+Compute time is important, especially if you're developing a long term model that will get a lot of repeated use. 
+But time-to-solve is also important, and the compact and direct nature of Shamsheer's solution meant that he got to an answer much faster than he would have had he tried to split up the ODE and the integration. 
+
+How do we know he got to a solution faster? We'll, 
+because we weren't able to implement a time stepping approach that could do what the original problem did. 
+The analysis itself wasn't the problem, but complex-stepping through the time-loop was. 
+There is not API accessible from the problem level to allow users complex-step across calls to `run_model`, 
+and hence we couldn't set up the optimization. 
+There was actually already a [POEM][cs-poem] up to propose that feature, even before RevHack2020, but its not quite ready to be accepted yet. 
 
 Once that is ready, we'll add an example to OpenMDAO's docs on how to do this. 
 We'll also add the time-stepping type integration to Dymos as well. 

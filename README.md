@@ -28,7 +28,8 @@ These topics involve general model building practices and concepts, and don't de
 * OpenMDAO as a compute engine -- Exploit the parts you like, leave the parts you don't! 
 * Sub-problems -- they are pretty handy in some situations! 
 * [How big should I make my components (how many lines of code)?][how-big]
-* Unsteady/transient analysis in OpenMDAO
+* Unsteady/transient analysis in OpenMDAO [unsteady]
 
 
+[unsteady]: ./solution_approaches/unsteady.md
 [how-big]: ./solution_approaches/how_big.md
