@@ -344,44 +344,66 @@ The results of the optimization are plotted below.
 The Dymos solution is plotted with blue dots, while the simulated Dymos result is plotted with an orange line.
 The reference solution, where available, is plotted with small black dots.
 
-We found an objective of 6.68, compared to 6.74 for the nominal case.
+We found an objective of 6.68E8, compared to 6.74E8 for the nominal case.
 There are some minor differences in the two solutions, but overall they're in pretty good agreement.
 
-![Dymos eVTOL Optimizaiton Results](results.png)
+Note that the original implementation uses a KS-constraint to pose the path constraints.
+This has the benefit of providing a single, scalar, differentiable constraint.
+One downside of this approach is that the constraint is somewhat conservative.
+While Dymos can closely ride the path constraint in the discrete solution, the KS constraint leaves a bit of margin, possibly buying some performance for the Dymos solution.
+A downside of the Dymos approach is that, by riding the constraint so tightly, theres a possiblity that it is voilated at points between our discrete solution.
+We can see this in the acceleration limit, where there is some overshooting of the acceleration in the middle of the trajectory.
+In practice, if we want to mitigate this, we can add more segments or higher-order segments to the problem to increase the density of the nodes where the path constraint is enforced.
+
+![Dymos eVTOL Optimization Results](results.png)
+
+## Performance Timings
+
+We've run the problem in three ways.
+
+- evtol_dymos_vectorized.py - "pure collocation," the optimizer is responsible for enforcing the physical defect constraints
+- evtol_dymos_vectorized_shooting.py - "single shooting," an internal solver converges the physical defects at each iteration - the optimizer only sees physically valid trajectories at eeach iteration.
+- original/takeoff_cs_run_script.py - the original implementation, with the user's own complex-step Euler integration.
+
+The resulting differences in performance are as follows:
+
+|                      | Dymos - collocation | Dymos - shooting | original |
+|----------------------|---------------------|------------------|----------|
+| Objective (energy)   | 6.696E6             | 6.696E6          | 6.750E6  |
+| Major Iterations     | 107                 | 55               | 288      |
+| Objective Time (s)   | 0.398               | 85.7             | 38.7     |
+| Sensitivity Time (s) | 16.51               | 8.3              | 1503.5   |
+| Total Time (s)       | 19.18               | 94.8             | 1542.7   |
+
+With a purely collocation-based approach, we almost achieved 100x speedup in solving the problem, and we find a slightly better solution as well.
 
 
-# Responses to original requests from the submission
+## Responses to original questions from the submission
 
-## Request:
-1. How do I implement this using Dymos?
-
-See above.
-
-2. What are the advantages over the current implementation?
+> What are the advantages over the current implementation?
 
 The dymos solution, as shown, takes roughly 30 seconds to solve, compared to something closer to an hour for the original implementation.
 The downside is that the dymos solution is a bit sensitive.
 
-## Stretch goals (or easier alternatives to the above request):
-1. What all needs to be done to use this with the latest recommended versions of Python and OpenMDAO?
+> What all needs to be done to use this with the latest recommended versions of Python and OpenMDAO?
 
 We were able to get the original version running by copying in the old BSpline code.
 
-2. I solved these problems with little difficulty with SNOPT, but I didn't have the same success with SciPy SLSQP, which is a problem for others who may want to use this code. What can I do to make these problems converge with SciPy SLSQP (or any other freely available optimizer that you recommend)?
+> I solved these problems with little difficulty with SNOPT, but I didn't have the same success with SciPy SLSQP, which is a problem for others who may want to use this code. What can I do to make these problems converge with SciPy SLSQP (or any other freely available optimizer that you recommend)?
 
 We were able to get this problem to solve using SNOPT or IPOPT with pyOptSparse.
 IPOPT is similar in capability to SNOPT. (both can account for sparsity and are generally more robust than SLSQP)
 IPOPT can be compiled using only free resources.
 Both SNOPT and IPOPT are, in our experience, far superior to SLSQP on larger problems.
 
-3. What are some poor practices that you observe, and what would you recommend instead and why?
+> What are some poor practices that you observe, and what would you recommend instead and why?
 
 **First, you should take advantage of OpenMDAO's use of units**
 * never having to wonder about what units a component is expecting in a model
 * the ability to set/get values in any units you wish
 * scaling the optimization variables just by specifying them in different units
 
-The lack of any units in this cases actually exposed some issues in dymos that are being addrdssed, simply because I never considered someone not using units at all.
+The lack of any units in this cases actually exposed some issues in Dymos that are being addrdssed, simply because I never considered someone not using units at all.
 
 **Second, when using gradient-based optimization you should take care that your model has well defined derivatives.**
 Any usage of an if-block in a `compute` method potentially introduces non-differentiable behavior.
