@@ -65,7 +65,7 @@ Again, since the ad-hoc option was available, it just never made it to the top o
 ## you can roll your own sub-problems
 
 The dev team assumed that ad-hoc implementations of sub-problems were fairly strait forward, 
-but the problem ideas we got submitted to RevHack 2020 universally didn't mention them or user them. 
+but the problem ideas we got submitted to RevHack 2020 universally did not mention them or user them. 
 So we've had revise re-evaluate our opinion on their strait forward-ness. 
 
 Our conclusion is that we need to, at the very least, 

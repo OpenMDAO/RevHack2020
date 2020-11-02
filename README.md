@@ -25,12 +25,13 @@ What you get out of it is two fold:
 Over the course of solving the problems we noticed a few general themes that were worth discussing in more detail.
 These topics involve general model building practices and concepts, and don't deal with specific solutions. 
 
-* OpenMDAO as a compute engine -- Exploit the parts you like, leave the parts you don't! 
+* [You don't have to use a driver!] -- Exploit the parts you like, leave the parts you don't! 
 * [Sub-problems][subproblem] -- they are pretty handy in some situations! 
-* [How big should I make my components (how many lines of code)?][how-big]
-* [Unsteady/transient analysis in OpenMDAO][unsteady]
+* [How big should I make my components?][how-big] --- How many lines of code should I aim for? 
+* [Unsteady/transient analysis in OpenMDAO][unsteady] --- The is a right way, and some other right ways!
 
 
+[no-driver]: ./solution_approaches/no_driver.md
 [subproblem]: ./solution_approaches/sub_problems.md
 [unsteady]: ./solution_approaches/unsteady_analysis.md
 [how-big]: ./solution_approaches/how_big.md
