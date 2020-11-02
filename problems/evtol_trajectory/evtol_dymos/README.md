@@ -348,3 +348,61 @@ We found an objective of 6.68, compared to 6.74 for the nominal case.
 There are some minor differences in the two solutions, but overall they're in pretty good agreement.
 
 ![Dymos eVTOL Optimizaiton Results](results.png)
+
+
+# Responses to original requests from the submission
+
+## Request:
+1. How do I implement this using Dymos?
+
+See above.
+
+2. What are the advantages over the current implementation?
+
+The dymos solution, as shown, takes roughly 30 seconds to solve, compared to something closer to an hour for the original implementation.
+The downside is that the dymos solution is a bit sensitive.
+
+## Stretch goals (or easier alternatives to the above request):
+1. What all needs to be done to use this with the latest recommended versions of Python and OpenMDAO?
+
+We were able to get the original version running by copying in the old BSpline code.
+
+2. I solved these problems with little difficulty with SNOPT, but I didn't have the same success with SciPy SLSQP, which is a problem for others who may want to use this code. What can I do to make these problems converge with SciPy SLSQP (or any other freely available optimizer that you recommend)?
+
+We were able to get this problem to solve using SNOPT or IPOPT with pyOptSparse.
+IPOPT is similar in capability to SNOPT. (both can account for sparsity and are generally more robust than SLSQP)
+IPOPT can be compiled using only free resources.
+Both SNOPT and IPOPT are, in our experience, far superior to SLSQP on larger problems.
+
+3. What are some poor practices that you observe, and what would you recommend instead and why?
+
+**First, you should take advantage of OpenMDAO's use of units**
+* never having to wonder about what units a component is expecting in a model
+* the ability to set/get values in any units you wish
+* scaling the optimization variables just by specifying them in different units
+
+The lack of any units in this cases actually exposed some issues in dymos that are being addrdssed, simply because I never considered someone not using units at all.
+
+**Second, when using gradient-based optimization you should take care that your model has well defined derivatives.**
+Any usage of an if-block in a `compute` method potentially introduces non-differentiable behavior.
+Sometimes this is unavoidable, but sometimes it's better to build a bridging function to smoothly connect two discontinuous portions of a model.
+The lift coefficient, for instance, is computed conditionally.
+There's even a note in the original implementation that complex-step doesn't seem to work right when alpha is close to zero, and this is the reason.
+
+**A third issue is potential reparameterization.**
+We found this model prone to encounter computational issues when used implicitly, particularly in this line:
+```
+    f = 1 + 0.5 * ((1 + Tc)**.5 - 1) + Tc / 4. / (2 + Tc)
+```
+As the problem is parameterized with power as an input, sometimes the thrust coefficient (Tc) would need to be negative to satisfy the inputs as given.
+Occasionally we would stumble into a condition where `(1 + Tc)` is negative, which hinders the optimization.
+While we didn't attempt it, it may be possible to provide thrust as a control variable and instead solve for power.
+Then, being a design variable, thrust could be limited to positive values and avoid this pitfall.
+Of course, similar issues may crop up when solving for power.
+
+**Finally, vectorization makes a huge difference in run time.**
+
+As originally posed, vectorization doesn't really make sense, but that's one of the reasons dymos exists.
+There are challenges to vectorizing code - the conditional blocks in the original code need to make use of the `numpy.where` function, for instance.
+Still, taking the solution time down from the order of one hour to one minute makes turning out analyses much easier.
+
