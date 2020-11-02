@@ -10,126 +10,90 @@ import verify_data
 
 mpl.rcParams['lines.markersize'] = 4
 
-sol = om.CaseReader('dymos_solution.db').get_case('final')
-sim = om.CaseReader('dymos_simulation.db').get_case(-1)
+sol_case = om.CaseReader('dymos_solution.db').get_case('final')
+sim_case = om.CaseReader('dymos_simulation.db').get_case(-1)
 
-time = sol.get_val('traj.phase0.timeseries.time')
-power = sol.get_val('traj.phase0.timeseries.controls:power')
-theta = sol.get_val('traj.phase0.timeseries.controls:theta')
-x = sol.get_val('traj.phase0.timeseries.states:x')
-y = sol.get_val('traj.phase0.timeseries.states:y')
-vx = sol.get_val('traj.phase0.timeseries.states:vx')
-vy = sol.get_val('traj.phase0.timeseries.states:vy')
-energy = sol.get_val('traj.phase0.timeseries.states:energy')
-acc = sol.get_val('traj.phase0.timeseries.acc')
-aoa = sol.get_val('traj.phase0.timeseries.aoa')
-thrust = sol.get_val('traj.phase0.timeseries.thrust')
-cl = sol.get_val('traj.phase0.timeseries.CL')
-cd = sol.get_val('traj.phase0.timeseries.CD')
+sol = {}
+sol['time']  = sol_case.get_val('traj.phase0.timeseries.time')
+sol['power'] = sol_case.get_val('traj.phase0.timeseries.controls:power')
+sol['theta'] = sol_case.get_val('traj.phase0.timeseries.controls:theta')
+sol['x'] = sol_case.get_val('traj.phase0.timeseries.states:x')
+sol['y'] = sol_case.get_val('traj.phase0.timeseries.states:y')
+sol['vx'] = sol_case.get_val('traj.phase0.timeseries.states:vx')
+sol['vy'] = sol_case.get_val('traj.phase0.timeseries.states:vy')
+sol['energy'] = sol_case.get_val('traj.phase0.timeseries.states:energy')
+sol['acc'] = sol_case.get_val('traj.phase0.timeseries.acc')
+sol['aoa'] = sol_case.get_val('traj.phase0.timeseries.aoa')
+sol['thrust'] = sol_case.get_val('traj.phase0.timeseries.thrust')
+sol['cl'] = sol_case.get_val('traj.phase0.timeseries.CL')
+sol['cd'] = sol_case.get_val('traj.phase0.timeseries.CD')
 
-time_exp = sim.get_val('traj.phase0.timeseries.time')
-power_exp = sim.get_val('traj.phase0.timeseries.controls:power')
-theta_exp = sim.get_val('traj.phase0.timeseries.controls:theta')
-x_exp = sim.get_val('traj.phase0.timeseries.states:x')
-y_exp = sim.get_val('traj.phase0.timeseries.states:y')
-vx_exp = sim.get_val('traj.phase0.timeseries.states:vx')
-vy_exp = sim.get_val('traj.phase0.timeseries.states:vy')
-energy_exp = sim.get_val('traj.phase0.timeseries.states:energy')
-acc_exp = sim.get_val('traj.phase0.timeseries.acc')
-aoa_exp = sim.get_val('traj.phase0.timeseries.aoa')
-thrust_exp = sim.get_val('traj.phase0.timeseries.thrust')
-cl_exp = sim.get_val('traj.phase0.timeseries.CL')
-cd_exp = sim.get_val('traj.phase0.timeseries.CD')
+sim = {}
+sim['time'] = sim_case.get_val('traj.phase0.timeseries.time')
+sim['power'] = sim_case.get_val('traj.phase0.timeseries.controls:power')
+sim['theta'] = sim_case.get_val('traj.phase0.timeseries.controls:theta')
+sim['x'] = sim_case.get_val('traj.phase0.timeseries.states:x')
+sim['y'] = sim_case.get_val('traj.phase0.timeseries.states:y')
+sim['vx'] = sim_case.get_val('traj.phase0.timeseries.states:vx')
+sim['vy'] = sim_case.get_val('traj.phase0.timeseries.states:vy')
+sim['energy'] = sim_case.get_val('traj.phase0.timeseries.states:energy')
+sim['acc'] = sim_case.get_val('traj.phase0.timeseries.acc')
+sim['aoa'] = sim_case.get_val('traj.phase0.timeseries.aoa')
+sim['thrust'] = sim_case.get_val('traj.phase0.timeseries.thrust')
+sim['cl'] = sim_case.get_val('traj.phase0.timeseries.CL')
+sim['cd'] = sim_case.get_val('traj.phase0.timeseries.CD')
 
+verif = {}
+verif['theta'] = np.load('../original/thetas.npy')
+verif['power'] = np.load('../original/powers.npy')
 steps = verify_data.thetas.size
-time_verif = np.linspace(0, verify_data.flight_time, steps)
-theta_verif = verify_data.thetas
-power_verif = verify_data.powers
-x_verif = verify_data.x
-y_verif = verify_data.y
-vx_verif = verify_data.x_dot
-vy_verif = verify_data.y_dot
-ax_verif = verify_data.a_x
-ay_verif = verify_data.a_y
-acc_verif = np.sqrt(ax_verif**2 + ay_verif**2) / 9.81
-power_verif = verify_data.powers
-thrust_verif = verify_data.thrusts
-cl_verif = verify_data.CL
-cd_verif = verify_data.CD
+verif['time'] = np.linspace(0, verify_data.flight_time, steps)
+verif['x'] = np.load('../original/x.npy')
+verif['y'] = np.load('../original/y.npy')
+verif['vx'] = np.load('../original/x_dots.npy')
+verif['vy'] = np.load('../original/y_dots.npy')
+verif['energy'] = np.load('../original/energy.npy')[:-1]
+verif['ax'] = np.load('../original/a_x.npy')
+verif['ay'] = np.load('../original/a_y.npy')
+verif['acc'] = np.load('../original/acc.npy')
+verif['aoa'] = np.load('../original/aoa.npy')
+verif['thrust'] = verify_data.thrusts[:-1]
+verif['cl'] = verify_data.CL[:-1]
+verif['cd'] = verify_data.CD[:-1]
 
+print(sol['energy'])
+print(sim['energy'])
+print(verif['energy'])
 
-fig, axes = plt.subplots(3, 3, figsize=(11,6))
-axes[0, 0].plot(time, power, 'o')
-axes[0, 0].plot(time_exp, power_exp, '-')
-import numpy as np
-axes[0, 0].plot(time_verif, power_verif.ravel(), 'k:')
-axes[0, 0].set_xlabel('time')
-axes[0, 0].set_ylabel('power')
+def plot_on_axes(x, y, axes, upper=None, lower=None):
+    axes.plot(sol[x], sol[y].ravel(), 'o')
+    axes.plot(sim[x], sim[y].ravel(), '-')
+    axes.plot(verif[x], verif[y].ravel(), 'k:')
+    if upper is not None:
+        axes.plot([0, 30], [upper, upper], 'r--')
+    if lower is not None:
+        axes.plot([0, 30], [lower, lower], 'r--')
 
-# fix, ax = plt.subplots(1, 1)
-axes[0, 1].plot(x, y, 'o')
-axes[0, 1].plot(x_exp, y_exp, '-')
-axes[0, 1].plot(x_verif, y_verif, 'k:')
-axes[0, 1].set_xlabel('x')
-axes[0, 1].set_ylabel('y')
+    axes.set_xlabel(x)
+    axes.set_ylabel(y)
 
-# fix, ax = plt.subplots(1, 1)
-axes[0, 2].plot(time, energy, 'o')
-axes[0, 2].plot(time_exp, energy_exp, '-')
-axes[0, 2].plot(time_verif, 6749880.06906939 * np.ones_like(time_verif), 'k:')
-axes[0, 2].set_xlabel('time')
-axes[0, 2].set_ylabel('energy')
+plt.style.use('seaborn-whitegrid')
+fig, axes = plt.subplots(3, 3, figsize=(15,6))
 
-# fix, ax = plt.subplots(1, 1)
-axes[1, 0].plot(time, acc, 'o')
-axes[1, 0].plot(time_exp, acc_exp, '-')
-axes[1, 0].plot(time_verif, acc_verif, 'k:')
-axes[1, 0].set_xlabel('time')
-axes[1, 0].set_ylabel('acc')
+axes = np.reshape(axes, (9,))
 
-# fix, ax = plt.subplots(1, 1)
-axes[1, 1].plot(time, vx, 'o')
-axes[1, 1].plot(time, vy, 'o')
-axes[1, 1].plot(time_exp, vx_exp, '-', label='vx')
-axes[1, 1].plot(time_exp, vy_exp, '-', label='vy')
-axes[1, 1].plot(time_verif, vx_verif[:-1], 'k:')
-axes[1, 1].plot(time_verif, vy_verif[:-1], 'k:')
-axes[1, 1].set_xlabel('time')
-axes[1, 1].set_ylabel('vx and vy')
-axes[1, 1].legend()
-
-axes[1, 2].plot(time, np.degrees(theta), 'o')
-axes[1, 2].plot(time_exp, np.degrees(theta_exp), '-')
-axes[1, 2].plot(time_verif, np.degrees(theta_verif).ravel(), 'k:')
-axes[1, 2].set_xlabel('time')
-axes[1, 2].set_ylabel('theta')
-
-
-axes[2, 0].plot(time, np.degrees(aoa), 'o')
-axes[2, 0].plot(time_exp, np.degrees(aoa_exp), '-')
-# axes[2, 0].plot(time_verif, aoa_verif.ravel(), 'k:')
-axes[2, 0].set_xlabel('time')
-axes[2, 0].set_ylabel('aoa')
-
-axes[2, 1].plot(time, thrust, 'o')
-axes[2, 1].plot(time_exp, thrust_exp, '-')
-axes[2, 1].plot(time_verif, thrust_verif[:-1], 'k:')
-axes[2, 1].set_xlabel('time')
-axes[2, 1].set_ylabel('thrust')
-
-axes[2, 2].plot(time, cl, 'o')
-axes[2, 2].plot(time, cd, 'o')
-axes[2, 2].plot(time_exp, cl_exp, '-', label='CL')
-axes[2, 2].plot(time_exp, cd_exp, '-', label='CD')
-axes[2, 2].plot(time_verif, cl_verif[:-1], 'k:')
-axes[2, 2].plot(time_verif, cd_verif[:-1], 'k:')
-axes[2, 2].set_xlabel('time')
-axes[2, 2].set_ylabel('CL ad CD')
-axes[2, 2].legend()
-
-for ax in axes.ravel():
-    ax.grid()
+plot_on_axes('time', 'power', axes[0])
+plot_on_axes('time', 'theta', axes[1])
+plot_on_axes('x', 'y', axes[2])
+plot_on_axes('time', 'energy', axes[3])
+plot_on_axes('time', 'aoa', axes[4], upper=np.radians(15))
+plot_on_axes('time', 'thrust', axes[5])
+plot_on_axes('time', 'acc', axes[6], upper=0.3)
+plot_on_axes('time', 'cl', axes[7])
+plot_on_axes('time', 'cd', axes[8])
 
 plt.tight_layout()
+
+plt.savefig('results.png')
 
 plt.show()
