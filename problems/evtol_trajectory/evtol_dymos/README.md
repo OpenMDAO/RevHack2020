@@ -362,18 +362,20 @@ In practice, if we want to mitigate this, we can add more segments or higher-ord
 We've run the problem in three ways.
 
 - evtol_dymos_vectorized.py - "pure collocation," the optimizer is responsible for enforcing the physical defect constraints
+- evtol_dymos.py - "pure collocation," but the ODE uses a for-loop rather than vectorization to compute values at all of the nodes
 - evtol_dymos_vectorized_shooting.py - "single shooting," an internal solver converges the physical defects at each iteration - the optimizer only sees physically valid trajectories at eeach iteration.
 - original/takeoff_cs_run_script.py - the original implementation, with the user's own complex-step Euler integration.
 
 The resulting differences in performance are as follows:
 
-|                      | Dymos - collocation | Dymos - shooting | original |
-|----------------------|---------------------|------------------|----------|
-| Objective (energy)   | 6.696E6             | 6.696E6          | 6.750E6  |
-| Major Iterations     | 107                 | 55               | 288      |
-| Objective Time (s)   | 0.398               | 85.7             | 38.7     |
-| Sensitivity Time (s) | 16.51               | 8.3              | 1503.5   |
-| Total Time (s)       | 19.18               | 94.8             | 1542.7   |
+|                      | Dymos - collocation | Dymos - collocation | Dymos - shooting | original       |
+|----------------------|---------------------|---------------------|------------------|----------------|
+|                      | vectorized          | non-vectorized      | vectorized       | non-vectorized |
+| Objective (energy)   | 6.696E6             | 6.695E6             | 6.696E6          | 6.750E6        |
+| Major Iterations     | 107                 | 74                  | 55               | 288            |
+| Objective Time (s)   | 0.398               | 0.9                 | 85.7             | 38.7           |
+| Sensitivity Time (s) | 16.51               | 62.6                | 8.3              | 1503.5         |
+| Total Time (s)       | 19.18               | 64.5                | 94.8             | 1542.7         |
 
 With a purely collocation-based approach, we almost achieved 100x speedup in solving the problem, and we find a slightly better solution as well.
 
