@@ -14,8 +14,21 @@ This problem served as a really good thought problem for the dev team for severa
 2) The time-step style time integration that was originally implemented is very familiar to most engineers, and hence its an obvious way to get your feet wet
 3) there were 4 different ways we thought we could improve on the original implementation
 
+# Our Solutions
 
-## Notes on the baseline code
+* [dymos based using implicit integration](./evtol/dymos/evtol_dymos.py)
+* [dymos based using implicit integration - Vectorized](./evtol/dymos/evtol_dymos_vectorized.py)
+* [dymos based using shooting - Vectorized](./evtol/dymos/evtol_dymos_vectorized_shooting.py)
+* [time-stepping with an RK4 integrator](./evtol_explicit_time_integration/time_step_rk4.py)
+
+We also gave a detailed analysis in an [ipython notebook that you can mess with in google-colab](./evtol/dymos/evtol_dymos.ipynb)! 
+
+## Note on the RK4 solution: 
+
+This solution is incomplete. We wanted to replicate the complex-step through the integrator approach used in the original code, but found that OpenMDAO's problem API's didn't let us. 
+We're working on fixing this, but for now ... its just an example of how do to time-stepping analysis in OpenMDAO. 
+
+# Notes on the baseline code
 
 One of the best features of the code provided was that it was extremely compact. 
 There were exactly two files that we needed to look at, one engineering file and one run script. 
