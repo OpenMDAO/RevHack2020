@@ -64,7 +64,8 @@ then you almost certainly can't afford to keep every time instance in memory at 
 
 When you wrap your head around OpenMDAO and its modular structure, some find it tempting to set up a time stepping structure directly inside an OpenMDAO group. 
 They stamp out `n` copies of their ODE, and then use some intermediate components to compute state updates. 
-This is exactly how the code in the [unsteady VLM][unsteady vlm] problem is set up. 
+This is exactly how the code in the [unsteady VLM][unsteady vlm] problem is set up, as shown by this N2 diagram: 
+![N2 for the unsteady VLM](unsteady_vlm_n2.png)
 
 The nice thing about this structure is that it lets you leverage OpenMDAO's derivatives system to easily compute adjoint total derivatives across the time integration. 
 That is very nice, but it comes at a high cost. 

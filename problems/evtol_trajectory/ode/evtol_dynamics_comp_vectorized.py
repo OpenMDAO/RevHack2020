@@ -298,9 +298,11 @@ def CDfunc(angle, AR, e, alpha_stall, coeffs, a0, t_over_c):
 
     abs_angle = cs_abs(angle)
 
+    angle_shape = angle.shape
+
     # this is for the first part (quartic fit)
-    CD_pt1 = np.dot(quartic_poly_coeffs, np.array([1, (27.5/180.*np.pi)**2, (27.5/180.*np.pi)**4])) * np.ones_like(abs_angle)
-    CD_pt2 = B1 * np.sin(28./180.*np.pi) + B2 * np.cos(28./180.*np.pi) * np.ones_like(abs_angle)
+    CD_pt1 = np.dot(quartic_poly_coeffs, np.array([1, (27.5/180.*np.pi)**2, (27.5/180.*np.pi)**4])) * np.ones(angle_shape)
+    CD_pt2 = B1 * np.sin(28./180.*np.pi) + B2 * np.cos(28./180.*np.pi) * np.ones(angle_shape)
 
     adjustment_line = (CD_pt2 - CD_pt1) / (0.5/180.*np.pi) * (abs_angle - 28./180.*np.pi) + CD_pt2
 
@@ -314,14 +316,13 @@ def CDfunc(angle, AR, e, alpha_stall, coeffs, a0, t_over_c):
     CD3 = B1 * np.sin(abs_angle) + B2 * np.cos(abs_angle)
 
     CD_array = np.vstack([CD3, CD_pt1]).T
-    fmax = np.max(CD_array, axis=1)
+    fmax = np.max(CD_array.real, axis=1)
     CD4 = (fmax + 1 / ks_rho * np.log(np.sum(np.exp(ks_rho * (CD_array - fmax[:, np.newaxis])))))
 
     # this puts them together
     CD_array = np.vstack([-CD2, -CD4]).T
-    fmax = np.max(CD_array, axis=1)
+    fmax = np.max(CD_array.real, axis=1)
     CD4 = -(fmax + 1 / ks_rho * np.log(np.sum(np.exp(ks_rho * (CD_array - fmax[:, np.newaxis])))))
-
     return CD4
 
 
@@ -447,6 +448,7 @@ class Dynamics(om.ExplicitComponent):
 
         # use complex step for partial derivatives
         self.declare_partials('*', '*', method='cs')
+        self.declare_coloring(method='cs', per_instance=True, show_sparsity=True, show_summary=True, perturb_size=1e-2)
 
         # # Partial derivative coloring
         # self.declare_coloring(wrt=['*'], method='cs', tol=1.0E-15, num_full_jacs=5,

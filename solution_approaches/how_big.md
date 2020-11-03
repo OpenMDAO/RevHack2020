@@ -101,18 +101,53 @@ We didn't have to look very far, since a different hackathon problem provided it
 OpenAeroStruct (OAS) is a low-fidelity aerostructural solver, built natively in OpenMDAO. 
 It tends to have many smaller components in order to make the derivatives easier to hand-derive. 
 However (skipping a lot of details), when solving this problem we found that modest sized meshes were pretty slow. 
-We used the OpenMDAO profiling tools to see that the cause of the problem was that there were a couple of components with outputs that got massive (i.e. the size of the arrays got very large) as the mesh grew and OpenMDAO's direct linear solver was bogging down a bit. 
+We used the OpenMDAO profiling tools to see that the cause of the problem was that there were a couple of components with outputs that got massive (i.e. the size of the arrays got very large) as the mesh grew and OpenMDAO's direct linear solver was bogging down because of the huge number of intermediate variables. 
+It looked like this: 
 
-So we decided to try and combine the components together, so the large arrays became intermediate variables that OpenMDAO didn't see. 
+
+                +   +   +  +
+                |   |   |  |
+                |   |   |  |
+                |   |   |  |
+            +---v---v---v--v--+
+            |                 |
+            |  Component 1    |
+            |                 |
+        +---------------------------+
+        | | |  | | | | | | | |  | | |
+        | | |  | | | | | | | |  | | |
+        | | |  | | | | | | | |  | | |
+        | | |  | | | | | | | |  | | |   Large intermediate variable 
+        | | |  | | | | | | | |  | | |   
+        v v v  v v v v v v v v  v v v
+        +----------------------------+
+        |                            |
+        |                            |
+        |   Component 2              |
+        |                            |
+        |                            |
+        +----------------------------+
+               |    |   |   |
+               |    |   |   |
+               |    |   |   |
+               |    |   |   |
+               |    |   |   |
+               |    |   |   |
+               v    v   v   v
+
+
+
+So we decided to try and combine the components together, so the large arrays became internal to the single component and made OpenMDAO's job easier. 
 To make this work, hand differentiation wasn't an option any more. 
 So we tried the algorithmic differentiation tool [JAX][jax], which worked surprisingly well. 
 However, nothing is easy ... and in this case despite the rule-of-thumb, OAS was significantly slower with the larger super-component. 
 
-In this case, the slowness was from JAX itself. 
-We spent some time with their JIT, and improved things a bit, but the hand implementation with smaller components was still better. 
+The slowness was from JAX itself. 
+We spent some time with their JIT and improved things a bit, but the hand implementation with smaller components was still better. 
 We need to do a bit more profiling at different mesh sizes, to see if there is now a cross-over point where the super-component wins out. 
 
-The exception to the rule stands none the less. Here was a case where derivative computation costs dominated, and we were able to be more efficient by hand implementation despite requiring smaller components. 
+The exception to the rule stands none the less. 
+Here was a case where derivative computation costs dominated, and we were able to be more efficient by hand implementation despite requiring smaller components. 
 
 
 ## Recommendation: start-small to learn, but go big for production code 
