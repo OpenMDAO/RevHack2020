@@ -5,7 +5,7 @@
 # Author: Shamsheer Chauhan
 # --------------------------------------------------------------------------------------------------
 
-from __future__ import division, print_function
+from __future__ import division
 import numpy as np
 from openmdao.api import ExplicitComponent
 
@@ -493,9 +493,8 @@ class Dynamics(ExplicitComponent):
         self.a0 = input_dict['a0']  # airfoil lift-curve slope
         self.t_over_c = input_dict['t_over_c']  # airfoil thickness-to-chord ratio
         self.v_factor = input_dict['induced_velocity_factor']  # induced-velocity factor
-        self.stall_option = input_dict[
-            'stall_option']  # stall option: 's' allows stall, 'ns' does not
-        self.num_steps = input_dict['num_steps']  # number of time steps
+        self.stall_option = input_dict['stall_option']  # stall option: 's' allows stall, 'ns' does not
+        # self.num_steps = input_dict['num_steps']  # number of time steps
         self.R = input_dict['R']  # propeller radius
         self.solidity = input_dict['solidity']  # propeller solidity
         self.omega = input_dict['omega']  # propeller angular speed
@@ -550,6 +549,11 @@ class Dynamics(ExplicitComponent):
 
         # use complex step for partial derivatives
         self.declare_partials('*', '*', method='cs')
+        self.declare_coloring(method='cs', per_instance=True, show_sparsity=True, show_summary=True)
+
+        # Partial derivative coloring
+        self.declare_coloring(wrt=['*'], method='cs', tol=1.0E-15, num_full_jacs=5,
+                              show_summary=True, show_sparsity=True, min_improve_pct=10.)
 
     def compute(self, inputs, outputs):
         thrust = self.T_guess
