@@ -15,10 +15,10 @@ What you get out of it is two fold:
 * [eVTOL takeoff optimization with Dymos][prob-evtol]
 * [Nested optimizations][prob-nested]
 * Optimize an OpenMDAO model with CMA-ES optimizer 
+* [Unsteady VLM simulation][prob-unsteady-vlm]
 
 ### The ones we didn't get to
 * OpenAeroStruct+Dymos for aircraft trajectory optimization
-* Unsteady VLM simulation 
 * Integrate an OpenAeroStruct analysis into a Dymos trajectory analysis model (@shamsheersc19)
 
 ## General solution approaches: 
@@ -37,4 +37,6 @@ These topics involve general model building practices and concepts, and don't de
 [unsteady]: ./solution_approaches/unsteady_analysis.md
 [how-big]: ./solution_approaches/how_big.md
 
-[prob-evtol]:./problems/evtol_trajectory
+[prob-evtol]: ./problems/evtol_trajectory
+[prob-nested]: ./problems/nested_optimizations
+[prob-unsteady-vlm]: ./problems/unsteady_vlm
