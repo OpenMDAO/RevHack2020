@@ -551,6 +551,10 @@ class Dynamics(ExplicitComponent):
         self.declare_partials('*', '*', method='cs')
         self.declare_coloring(method='cs', per_instance=True, show_sparsity=True, show_summary=True)
 
+        # Partial derivative coloring
+        self.declare_coloring(wrt=['*'], method='cs', tol=1.0E-15, num_full_jacs=5,
+                              show_summary=True, show_sparsity=True, min_improve_pct=10.)
+
     def compute(self, inputs, outputs):
         thrust = self.T_guess
 

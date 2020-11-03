@@ -368,14 +368,20 @@ We've run the problem in three ways.
 
 The resulting differences in performance are as follows:
 
-|                      | Dymos - collocation | Dymos - collocation | Dymos - shooting | original       |
-|----------------------|---------------------|---------------------|------------------|----------------|
-|                      | vectorized          | non-vectorized      | vectorized       | non-vectorized |
-| Objective (energy)   | 6.696E6             | 6.695E6             | 6.696E6          | 6.750E6        |
-| Major Iterations     | 107                 | 74                  | 55               | 288            |
-| Objective Time (s)   | 0.398               | 0.9                 | 85.7             | 38.7           |
-| Sensitivity Time (s) | 16.51               | 62.6                | 8.3              | 1503.5         |
-| Total Time (s)       | 19.18               | 64.5                | 94.8             | 1542.7         |
+|                      | Dymos - collocation | Dymos - collocation | Dymos - shooting  | Dymos - shooting | original       |
+|----------------------|---------------------|---------------------|-------------------|------------------|----------------|
+| Vectorized           | vectorized [NOTE]   | non-vectorized      | vectorized [NOTE] | non-vectorized   | non-vectorized |
+| Optimizer            | IPOPT               | IPOPT               | IPOPT             | IPOPT            | SNOPT          |
+| Objective (energy)   | 6.696E6             | 6.695E6             | 6.696E6           | 6.696E6          | 6.750E6        |
+| Major Iterations     | 88                  | 97                  | 55                | 51               | 288            |
+| Objective Time (s)   | 0.54                | 0.9                 | 85.7              | 26.5             | 38.7           |
+| Sensitivity Time (s) | 12.26               | 11.2                | 8.3               | 4.8              | 1503.5         |
+| Total Time (s)       | 14.78               | 14.3                | 94.8              | 32.1             | 1542.7         |
+
+
+Note: The vectorized ODE has issues with partial derivative coloring (specifically in CDfunc) and we weren't able to achieve a great coloring from this ODE.
+If that's addressed, expect the runtimes of the vectorized versions to be at least another 2x faster.
+This wipes out any advantage vectorization has for the collocation approach, and causes the vectorized shooting approach to be significntly slower than the for-loop implementation.
 
 With a purely collocation-based approach, we almost achieved 100x speedup in solving the problem, and we find a slightly better solution as well.
 
