@@ -38,5 +38,5 @@ These topics involve general model building practices and concepts, and don't de
 [how-big]: ./solution_approaches/how_big.md
 
 [prob-evtol]: ./problems/evtol_trajectory
-[prob-nested]: ./problems/nested_optimizations
+[prob-nested]: ./problems/nested_optimization
 [prob-unsteady-vlm]: ./problems/unsteady_vlm
