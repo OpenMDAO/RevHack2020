@@ -6,19 +6,133 @@ MDO architectures or more custom one-off solutions.
 But, as you'll see there are other good use cases for it too. 
 
 ## What is a sub-problem? 
-A simple answer is this: a sub-problem is a `Problem` instance that gets embedded within the `model` of another OpenMDAO problem. 
+A simple answer is this: a sub-problem is a `Problem` instance that gets embedded within a component, and used as part of an outer OpenMDAO model. 
 
-The reality is just a little more complex. the `Problem` class in OpenMDAO does not support the same interface as the `Component` class. 
-The `Component` interface is needed to be able to add something to a `model`, so in order to make sub-problems work you have to somehow add this interface to your sub-problem. 
+```python 
+import openmdao.api as om
 
-The simple way to do this is to embed the sub-problem inside a component wrapper, like this: 
+class SubProbComp(om.ExplicitComponent): 
 
-![cartoon diagram of a sub-problem](sub_problem_cartoon.png)
+    def setup(self): 
+
+        # create a sub-problem to use later in the compute
+        p = self._prob = om.Problem()
+
+        p.model.add_subsystem('c1', om.ExecComp('y = 2*x'), promotes=['*'])
+        p.model.add_subsystem('c2', om.ExecComp('z = exp(y)'), promotes=['*'])
+
+        p.setup()
+        
+
+        #define the i/o of the component
+        # from the component's perspective, we get z = f(x)
+        self.add_input('x')
+        self.add_output('z')
+
+        self.declare_partials('*', '*', method='fd')
+
+    def compute(self, inputs, outputs): 
+
+        p = self._prob
+
+        p['x'] = inputs['x']
+        p.run_model()
+        outputs['z'] = p['z']
+
+
+
+outer_prob = om.Problem()
+
+outer_prob.model.add_subsystem('sub_prob1', SubProbComp(), promotes_outputs=[('z', 'z1')])
+outer_prob.model.add_subsystem('sub_prob2', SubProbComp(), promotes_outputs=[('z', 'z2')])
+outer_prob.model.add_subsystem('combine', om.ExecComp('f = z1 + z2'), promotes=['*'])
+
+outer_prob.setup()
+
+outer_prob['sub_prob1.x'] = 1
+outer_prob['sub_prob2.x'] = 2
+
+outer_prob.run_model()
+
+print(outer_prob['z1'], outer_prob['z2'], outer_prob['f'] )
+``` 
+
+Of course, this is a trivial example that really just serves to show you how to embed a problem within a component. 
+There was no need for a sub-problem here, just to make a component that did `z=exp(2*x)`. 
+In reality you would choose to use a sub-problem because you have some meaningfully complex model built up from a combination of existing components that you want to encapsulate. 
+
+## When should you use a sub-problem? 
+
 
 Sub-problems have lots of good use cases. 
 The most commonly discussed one is for sub-optimizations. 
 Another important one that came up in this hackathon is as a means to support time-stepping based unsteady analyses. 
 A third use case also arose here, when sub-problems were valuable in allowing finite-differencing of a sub-model to use derivatives in a top level constraint on an optimization. 
+
+It is important to note that you don't always need to use a sub-problem, 
+even if you are planning to do some sub-optimization. 
+If you have a stand along chunk of code that isn't already integrated as an OpenMDAO model, then adding a problem wrapper around it seems unnecessary. 
+Here is an example submitted by John Jasa for RevHack 2020, that does not use sub-problems and doesn't really need to. 
+(Note: in our solution's we converted this to use sub-problems to serve as a demonstration of how to do it... but not to say that we think it should always be done that way.)
+
+```python 
+import numpy as np
+from scipy.optimize import minimize
+import openmdao.api as om
+
+
+def compute_power(pitch_angle, wind_speed, drag_modifier):
+    CD = np.pi * drag_modifier * np.deg2rad(pitch_angle) ** 2
+    airfoil_power_boost = (drag_modifier - wind_speed * 2.0) ** 2.0 / 10.0
+    return -((wind_speed - CD) ** 3) - airfoil_power_boost
+
+
+def compute_power_constraint(pitch_angle, wind_speed, drag_modifier, P_rated):
+    neg_power = compute_power(pitch_angle, wind_speed, drag_modifier)
+    return neg_power + P_rated
+
+
+class ComputePitchAngles(om.ExplicitComponent):
+    def initialize(self):
+        self.options.declare("size")
+        self.options.declare("P_rated")
+
+    def setup(self):
+        size = self.options["size"]
+
+        self.add_input("wind_speeds", np.zeros(size))
+        self.add_input("drag_modifier", 11.0)
+
+        self.add_output("pitch_angles", np.zeros(size))
+        self.add_output("powers", np.zeros(size))
+        self.add_output("total_power")
+
+    def compute(self, inputs, outputs):
+        P_rated = self.options["P_rated"]
+        drag_modifier = inputs["drag_modifier"]
+
+        for i, wind_speed in enumerate(inputs["wind_speeds"]):
+            constraints = [
+                {
+                    "type": "ineq",
+                    "fun": compute_power_constraint,
+                    "args": [wind_speed, drag_modifier, P_rated],
+                }
+            ]
+            result = minimize(
+                compute_power,
+                1.0,
+                args=(wind_speed, drag_modifier),
+                method="SLSQP",
+                bounds=[(-15.0, 15.0)],
+                options={"disp": False},
+                constraints=constraints,
+            )
+            outputs["pitch_angles"][i] = result.x
+            outputs["powers"][i] = result.fun
+
+        outputs["total_power"] = np.sum(outputs["powers"])
+```
 
 ## Nested Optimization can be done via Sub-Problems with V3! 
 I know ... you don't believe me.
