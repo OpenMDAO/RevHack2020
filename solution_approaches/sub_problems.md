@@ -73,7 +73,7 @@ It is important to note that you don't always need to use a sub-problem,
 even if you are planning to do some sub-optimization. 
 If you have a stand along chunk of code that isn't already integrated as an OpenMDAO model, then adding a problem wrapper around it seems unnecessary. 
 Here is an example submitted by John Jasa for RevHack 2020, that does not use sub-problems and doesn't really need to. 
-(Note: in our solution's we converted this to use sub-problems to serve as a demonstration of how to do it... but not to say that we think it should always be done that way.)
+*(Note: in our solutions we converted this to use sub-problems to serve as a demonstration of how to do it... but not to say that we think it should always be done that way.)*
 
 ```python 
 import numpy as np
