@@ -16,12 +16,12 @@ This problem served as a really good thought problem for the dev team for severa
 
 # Our Solutions
 
-* [dymos based using implicit integration](./evtol/dymos/evtol_dymos.py)
-* [dymos based using implicit integration - Vectorized](./evtol/dymos/evtol_dymos_vectorized.py)
-* [dymos based using shooting - Vectorized](./evtol/dymos/evtol_dymos_vectorized_shooting.py)
+* [dymos based using implicit integration](./evtol_dymos/evtol_dymos.py)
+* [dymos based using implicit integration - Vectorized](./evtol_dymos/evtol_dymos_vectorized.py)
+* [dymos based using shooting - Vectorized](./evtol_dymos/evtol_dymos_vectorized_shooting.py)
 * [time-stepping with an RK4 integrator](./evtol_explicit_time_integration/time_step_rk4.py)
 
-We also gave a detailed analysis in an [ipython notebook that you can mess with in google-colab](./evtol/dymos/evtol_dymos.ipynb)! 
+We also gave a detailed analysis in an [ipython notebook that you can mess with in google-colab](./evtol_dymos/evtol_dymos.ipynb)! 
 
 ## Note on the RK4 solution: 
 
