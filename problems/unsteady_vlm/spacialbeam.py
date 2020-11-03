@@ -298,19 +298,6 @@ class SpatialBeamMatrices(om.ExplicitComponent):
         outputs['M_matrix'] = self.M_mtx
         outputs['K_matrix'] = self.K_mtx
 
-    # def linearize(self, inputs, outputs, resids):
-    #     """ Jacobian for structural matrices """
-
-    #     jac = self.alloc_jacobian()
-
-    #     fd_jac = self.complex_step_jacobian(inputs, outputs, resids,
-    #                             fd_inputs=['A','Iy','Iz','J','mesh'],
-    #                             fd_outputs=['M_matrix', 'K_matrix'],
-    #                             fd_states=[])
-
-    #     jac.update(fd_jac)
-    #     return jac
-
 
 class SpatialBeamEIG(om.ExplicitComponent):
     """ Computes eigenvalues and eigenvectors. """
@@ -357,18 +344,6 @@ class SpatialBeamEIG(om.ExplicitComponent):
         outputs['dt'] = self.final_t / self.num_dt
 
         self.createNBSolver(inputs, outputs)
-
-    # def linearize(self, inputs, outputs, resids):
-    #     """ Jacobian for eigenvalues and eigenvectors """
-
-    #     jac = self.alloc_jacobian()
-    #     fd_jac = self.complex_step_jacobian(inputs, outputs, resids,
-    #                             fd_inputs=['v', 'span', 'M_matrix', 'K_matrix'],
-    #                             fd_outputs=['evalues', 'evectors', 'dt'],
-    #                             fd_states=[])
-    #     jac.update(fd_jac)
-
-    #     return jac
 
 
 class SpatialBeamFEM(om.ExplicitComponent):
@@ -426,22 +401,6 @@ class SpatialBeamFEM(om.ExplicitComponent):
         self.SBEIG.NBSolver.timeStepping()
         outputs[disp_aug_t][6:] = self.SBEIG.NBSolver.getCurDispl()
 
-    # def linearize(self, inputs, outputs, resids):
-    #     """ Jacobian for eigenvalues and eigenvectors """
-
-    #     def_mesh_t = self.def_mesh_t
-    #     loads_t = self.loads_t
-    #     disp_aug_t = self.disp_aug_t
-
-    #     jac = self.alloc_jacobian()
-
-    #     fd_jac = self.complex_step_jacobian(inputs, outputs, resids,
-    #                             fd_inputs=['dt', def_mesh_t, loads_t],
-    #                             fd_outputs=[disp_aug_t],
-    #                             fd_states=[])
-    #     jac.update(fd_jac)
-    #     return jac
-
 
 class SpatialBeamDisp(om.ExplicitComponent):
     """ Selects displacements from augmented vector """
@@ -476,17 +435,6 @@ class SpatialBeamDisp(om.ExplicitComponent):
         disp_t = self.disp_t
 
         outputs[disp_t] = numpy.array(inputs[disp_aug_t][:6*n].reshape((n, 6)))
-
-    # def linearize(self, inputs, outputs, resids):
-
-    #     disp_aug_t = self.disp_aug_t
-    #     disp_t = self.disp_t
-
-    #     jac = self.alloc_jacobian()
-
-    #     arange = self.arange
-    #     jac[disp_t, disp_aug_t][arange, arange] = 1.
-    #     return jac
 
 
 class SpatialBeamStates(om.Group):
