@@ -13,7 +13,7 @@ What you get out of it is two fold:
 ### The ones we finished 
 * OpenAeroStruct+VSP to optimize an aircraft subject stability constraints
 * [eVTOL takeoff optimization with Dymos][prob-evtol]
-* Nested optimizations
+* [Nested optimizations][prob-nested]
 * Optimize an OpenMDAO model with CMA-ES optimizer 
 
 ### The ones we didn't get to
