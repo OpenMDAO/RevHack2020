@@ -221,8 +221,8 @@ def CLfunc(angle, alpha_stall, AR, e, a0, t_over_c):
     CL : float
         Lift coefficient of the wing
     """
-    pos_idxs = np.where(angle >= 0)[0]
-    neg_idxs = np.where(angle < 0)[0]
+    pos_idxs = np.where(angle.real >= 0)[0]
+    neg_idxs = np.where(angle.real < 0)[0]
     CL = np.zeros_like(angle)
 
     CLa = a0 / (1 + a0 / (np.pi * e * AR))
@@ -247,13 +247,12 @@ def CLfunc(angle, alpha_stall, AR, e, a0, t_over_c):
     fmax = np.max(CL_array, axis=1)
     fmax_neg = np.max(CL_array_neg, axis=1)
 
-    with np.printoptions(linewidth=1024):
-        if np.any(angle >= 0):
-            sum_term = np.sum(np.exp(ks_rho * (CL_array[pos_idxs] - fmax[pos_idxs, np.newaxis])), axis=1)
-            CL[pos_idxs] = -(fmax[pos_idxs] + 1 / ks_rho * np.log(sum_term)).ravel()
-        if np.any(angle < 0):
-            sum_term = np.sum(np.exp(ks_rho * (CL_array_neg[neg_idxs] - fmax_neg[neg_idxs, np.newaxis])), axis=1)
-            CL[neg_idxs] = (fmax_neg[neg_idxs] + 1 / ks_rho * np.log(sum_term)).ravel()
+    if np.any(angle.real >= 0):
+        sum_term = np.sum(np.exp(ks_rho * (CL_array[pos_idxs] - fmax[pos_idxs, np.newaxis])), axis=1)
+        CL[pos_idxs] = -(fmax[pos_idxs] + 1 / ks_rho * np.log(sum_term)).ravel()
+    if np.any(angle.real < 0):
+        sum_term = np.sum(np.exp(ks_rho * (CL_array_neg[neg_idxs] - fmax_neg[neg_idxs, np.newaxis])), axis=1)
+        CL[neg_idxs] = (fmax_neg[neg_idxs] + 1 / ks_rho * np.log(sum_term)).ravel()
 
     return CL
 
