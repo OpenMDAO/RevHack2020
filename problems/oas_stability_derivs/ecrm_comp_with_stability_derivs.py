@@ -29,6 +29,11 @@ class ECRM(om.ExplicitComponent):
 
         self._problem = None
 
+        # Added a switch to disable them when I was just doing parameter studies on the lift
+        # constraint.
+        self._calc_stability_derivs = True
+        self._totals = {}
+
     def initialize(self):
         self.options.declare('wing_surface', types=dict, default={},
                              desc="Dict containing settings that define the OAS surface "
@@ -39,44 +44,63 @@ class ECRM(om.ExplicitComponent):
         self.options.declare('vert_tail_surface', types=dict, default={},
                              desc="Dict containing settings that define the OAS surface "
                              "for the vertical tail.")
+        self.options.declare('num_nodes', default=1,
+                             desc='Number of flight points to run.')
 
     def setup(self):
+        num_nodes = self.options['num_nodes']
 
-        # General Inputs
-        self.add_input('v', val=248.136, units='m/s')
-        self.add_input('alpha', val=0.0, units='deg')
+        # Design Parameters
+        self.add_input('v', val=248.136 * np.ones(num_nodes), units='m/s')
+        self.add_input('alpha', val=np.ones(num_nodes), units='deg')
+        self.add_input('Mach_number', val=0.1 * np.ones(num_nodes))
+
+        # VSP Geometry Parameters
+        self.add_input('wing_cord', val=59.05128, units='inch**2')
+        self.add_input('vert_tail_area', val=2295., units='inch**2')
+        self.add_input('horiz_tail_area', val=6336., units='inch**2')
+
+        # Constant Inputs
         self.add_input('beta', val=0.0, units='deg')
-        self.add_input('Mach_number', val=0.1)
         self.add_input('re', val=1.0e6, units='1/m')
         self.add_input('rho', val=0.38, units='kg/m**3')
         self.add_input('CT', val=grav_constant * 17.e-6, units='1/s')
-        self.add_input('R', val=11.165e6, units='m')
-        self.add_input('W0', val=0.4 * 3e5,  units='kg')
+        self.add_input('R', val=50.0, units='km')
+        self.add_input('W0', val=2000.0,  units='kg')
         self.add_input('speed_of_sound', val=295.4, units='m/s')
         self.add_input('load_factor', val=1.)
-        self.add_input('empty_cg', val=np.zeros((3)), units='m')
-
-        # VSP Geometry Inputs
-        # TODO - Original model gave no units. Probably inches, but check.
-        self.add_input('wing_cord', val=59.05128)
-        self.add_input('vert_tail_area', val=2295.)
-        self.add_input('horiz_tail_area', val=6336.)
+        self.add_input('empty_cg', np.array([262.614, 0.0, 115.861]), units='inch')
 
         # Outputs
-        self.add_output('CL', 0.0)
-        self.add_output('CD', 0.0)
+        self.add_output('CL', np.zeros(num_nodes))
+        self.add_output('CD', np.zeros(num_nodes))
 
-        self.add_output('CM_alpha', 0.0)
-        self.add_output('CL_alpha', 0.0)
-        self.add_output('CN_beta', 0.0)
+        self.add_output('CM_alpha', np.zeros(num_nodes))
+        self.add_output('CL_alpha', np.zeros(num_nodes))
+        self.add_output('CN_beta', np.zeros(num_nodes))
 
-        self.add_output('L_equals_W', 0.0)
-        self.add_output('S', 0.0)
+        self.add_output('L_equals_W', np.zeros(num_nodes))
 
     def setup_partials(self):
-        self.declare_partials(of='*', wrt='*', method='fd')
+        num_nodes = self.options['num_nodes']
+
+        # This component calculates all derivatives during compute.
+        self.declare_partials(of=['CL', 'CD', 'L_equals_W'],
+                              wrt=['wing_cord', 'vert_tail_area', 'horiz_tail_area'],
+                              rows=np.arange(num_nodes), cols=np.zeros(num_nodes))
+        self.declare_partials(of=['CL', 'CD', 'L_equals_W'],
+                              wrt=['alpha', 'v', 'Mach_number'],
+                              rows=np.arange(num_nodes), cols=np.arange(num_nodes))
+
+        # But we also need derivatives of the stability derivatives.
+        # Those can only be computed with FD.
+        self.declare_partials(of=['CM_alpha', 'CL_alpha', 'CN_beta'],
+                              wrt=['alpha', 'v', 'Mach_number', 'wing_cord',
+                                   'vert_tail_area', 'horiz_tail_area'],
+                              method='fd')
 
     def compute(self, inputs, outputs):
+        num_nodes = self.options['num_nodes']
         prob = self._problem
 
         # Build the model the first time we run.
@@ -95,12 +119,12 @@ class ECRM(om.ExplicitComponent):
             indep_var_comp.add_output('v', val=248.136, units='m/s')
             indep_var_comp.add_output('alpha', val=0.0, units='deg')
             indep_var_comp.add_output('beta', val=0.0, units='deg')
-            indep_var_comp.add_output('Mach_number', val=0.1)                   # 70 mph approx. TODO: make exact
+            indep_var_comp.add_output('Mach_number', val=0.1)
             indep_var_comp.add_output('re', val=1.0e6, units='1/m')
             indep_var_comp.add_output('rho', val=0.38, units='kg/m**3')
             indep_var_comp.add_output('CT', val=grav_constant * 17.e-6, units='1/s')
-            indep_var_comp.add_output('R', val=11.165e6, units='m')
-            indep_var_comp.add_output('W0', val=0.4 * 3e5,  units='kg')
+            indep_var_comp.add_output('R', val=50.0, units='km')
+            indep_var_comp.add_output('W0', val=2000.0,  units='kg')
             indep_var_comp.add_output('speed_of_sound', val=295.4, units='m/s')
             indep_var_comp.add_output('load_factor', val=1.)
             indep_var_comp.add_output('empty_cg', val=np.array([262.614, 0.0, 115.861]), units='inch')
@@ -143,11 +167,7 @@ class ECRM(om.ExplicitComponent):
             prob.setup()
             self._problem = prob
 
-        # Set new values.
-        prob.set_val('v', inputs['v'])
-        prob.set_val('alpha', inputs['alpha'])
-        prob.set_val('beta', inputs['beta'])
-        prob.set_val('Mach_number', inputs['Mach_number'])
+        # Set constants
         prob.set_val('re', inputs['re'])
         prob.set_val('rho', inputs['rho'])
         prob.set_val('CT', inputs['CT'])
@@ -157,30 +177,57 @@ class ECRM(om.ExplicitComponent):
         prob.set_val('load_factor', inputs['load_factor'])
         prob.set_val('empty_cg', inputs['empty_cg'])
 
-        prob.set_val('wing_cord', inputs['wing_cord'])
-        prob.set_val('vert_tail_area', inputs['vert_tail_area'])
-        prob.set_val('horiz_tail_area', inputs['horiz_tail_area'])
+        for j in range(num_nodes):
 
-        # Run Problem
-        prob.run_model()
+            # Set new design values.
+            prob.set_val('v', inputs['v'][j])
+            prob.set_val('alpha', inputs['alpha'][j])
+            prob.set_val('beta', inputs['beta'])
+            prob.set_val('Mach_number', inputs['Mach_number'][j])
 
-        # Extract Outputs
-        outputs['CL'] = prob.get_val('aero.CL')
-        outputs['CD'] = prob.get_val('aero.CD')
-        outputs['L_equals_W'] = prob.get_val('aero.L_equals_W')
+            prob.set_val('wing_cord', inputs['wing_cord'])
+            prob.set_val('vert_tail_area', inputs['vert_tail_area'])
+            prob.set_val('horiz_tail_area', inputs['horiz_tail_area'])
 
-        # Compute Stability Derivatives
-        of = ['aero.CL', 'aero.CD', 'aero.CM']
-        wrt = ['alpha', 'beta']
-        from time import time
-        t0 = time()
-        totals = prob.compute_totals(of=of, wrt=wrt)
-        print('OAS stability deriv time:', time() - t0)
+            # Run Problem
+            prob.run_model()
 
-        # Extract Stability Derivatives
-        outputs['CM_alpha'] = totals['aero.CM', 'alpha'][1, 0]
-        outputs['CL_alpha'] = totals['aero.CL', 'alpha'][0, 0]
-        outputs['CN_beta'] = totals['aero.CM', 'beta'][2, 0]
+            # Extract Outputs
+            outputs['CL'][j] = prob.get_val('aero.CL')
+            outputs['CD'][j] = prob.get_val('aero.CD')
+            outputs['L_equals_W'][j] = prob.get_val('aero.L_equals_W')
+
+            if self._calc_stability_derivs:
+
+                # Compute all component derivatives.
+                # Compute Stability Derivatives and
+                of = ['aero.CL', 'aero.CD', 'aero.CM', 'aero.L_equals_W']
+                wrt = ['alpha', 'beta', 'v', 'Mach_number',
+                       'wing_cord', 'vert_tail_area', 'horiz_tail_area']
+
+                from time import time
+                t0 = time()
+                totals = prob.compute_totals(of=of, wrt=wrt)
+                print('OAS stability deriv time:', time() - t0)
+
+                # Extract Stability Derivatives
+                outputs['CM_alpha'][j] = totals['aero.CM', 'alpha'][1, 0]
+                outputs['CL_alpha'][j] = totals['aero.CL', 'alpha'][0, 0]
+                outputs['CN_beta'][j] = totals['aero.CM', 'beta'][2, 0]
+
+                self._totals[j] = totals
+
+    def compute_partials(self, inputs, partials):
+        num_nodes = self.options['num_nodes']
+        ofs = ['CL', 'CD', 'L_equals_W']
+        local_ofs = ['aero.CL', 'aero.CD', 'aero.L_equals_W']
+        wrts = ['alpha', 'v', 'Mach_number',
+                'wing_cord', 'vert_tail_area', 'horiz_tail_area']
+
+        for j in range(num_nodes):
+            for of, local_of in zip(ofs, local_ofs):
+                for wrt in wrts:
+                    partials[of, wrt][j] = self._totals[j][local_of, wrt]
 
 
 if __name__ == "__main__":
@@ -195,7 +242,6 @@ if __name__ == "__main__":
     horiz_tail_mesh = meshes['horiz_tail_mesh']
     vert_tail_mesh = meshes['vert_tail_mesh']
 
-    # Define data for surfaces
     # Define data for surfaces
     wing_surface = {
         # Wing definition
@@ -325,7 +371,7 @@ if __name__ == "__main__":
         'yield' : 500.e6 / 2.5, # [Pa] yield stress divided by 2.5 for limiting case
         'mrho' : 3.e3,          # [kg/m^3] material density
         'fem_origin' : 0.35,    # normalized chordwise location of the spar
-        'wing_weight_ratio' : 2.,
+        'wing_weight_ratio' : 1.,
         'struct_weight_relief' : False,    # True to add the weight of the structure to the loads on the structure
         'distributed_fuel_weight' : False,
         # Constraints
@@ -349,6 +395,8 @@ if __name__ == "__main__":
 
     prob.run_model()
     t2 = time() - t0 - t1
+
+    #prob.check_totals('CM_alpha', 'alpha')
 
     print('stability derivs')
     print('CM_alpha', prob.get_val('CM_alpha'))
