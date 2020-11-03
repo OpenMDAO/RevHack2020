@@ -549,6 +549,7 @@ class Dynamics(ExplicitComponent):
 
         # use complex step for partial derivatives
         self.declare_partials('*', '*', method='cs')
+        self.declare_coloring(method='cs', per_instance=True, show_sparsity=True, show_summary=True)
 
     def compute(self, inputs, outputs):
         thrust = self.T_guess
