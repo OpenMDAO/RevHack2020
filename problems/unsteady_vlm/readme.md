@@ -48,6 +48,6 @@ Lastly we have the inputs from the time-loop to the final calculation block:
 `S_ref` (which is a bit weird, because it comes from time step 0)
 `sec_L_19`, an `sec_D_19`. 
 
-![variables passed from time-loop to final calculations](aero_time_vars.png)
+![variables passed from time-loop to final calculations](post_block_inputs.png)
 
 
