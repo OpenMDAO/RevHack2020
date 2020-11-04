@@ -39,10 +39,15 @@ Using the N2, we can see what the various inputs variables are: `dt`, `K_matrix`
 
 ### I/O: time_i -> time_i+1
 
-Again, using the N2 diagram we can find the necessary data passing: 
+Again, using the N2 diagram we can find the necessary data passing: `circ_{i}`, `wake_mesh_{i}`, `sigma_x_{i}`, `disp_{i}`
 ![variables passed between time-steps](aero_time_vars.png)
 
 ### I/O: time loop -> after block
 
+Lastly we have the inputs from the time-loop to the final calculation block: 
+`S_ref` (which is a bit weird, because it comes from time step 0)
+`sec_L_19`, an `sec_D_19`. 
+
+![variables passed from time-loop to final calculations](aero_time_vars.png)
 
 
