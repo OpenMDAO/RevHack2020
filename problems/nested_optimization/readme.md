@@ -188,32 +188,6 @@ class ComputePitchAnglesUsingSubProblem(om.ExplicitComponent):
         outputs["total_power"] = np.sum(outputs["powers"])
 ```
 
-
-# Our solutions: 
-## With sub-problems (just for demonstration purposes)
-* [Nested optimization with a sub-problem](./run_sequential_opt_using_subproblem.py)
-* [Sequential Optimization with sub-problem](./run_sequential_opt_using_subproblem.py)
-
-## Solutions without sub-problems
-* Original solution given by John Jasa
-* Solver based approach
-
-
-# A theoretical discussion on nested optimizations
-
-## You can think of nested optimization as a form of Multi Disciplinary Feasbile (MDF) architecture
-
-The MDF architecture is typically thought of in terms of converging the governing equations for your analysis with a solver. 
-Thats an overly specific interpretation though. 
-More generally, MDF removes degrees of freedom from the top level problem by handing them to a well behaved sub-solver. 
-
-If that sub-solver happens to be a nonlinear solver and the degrees of freedom happen to be state variables for your analysis then you get the traditional view of MDF. 
-But its equally valid to think of the sub-solver as an optimizer and the degrees of freedom as the operational variables for your problem. 
-
-Generally speaking we know that the MDF solution approach tends to be slower but more reliably convergent, assuming you can reliably get a converged sub-problem for any design within the search space of the top level problem. 
-
-So in the context of this kind of problem, it seem to us that using an MDF style approach is reasonable. 
-
 ## What about seqential optimization? 
 
 This approach is very commonly used. 
@@ -231,14 +205,107 @@ Its not critical that you *always* get the best possible optimum, and if sequent
 Just keep in mind that you may be leaving performance on the table, 
 and if you are in a situation where you're not happy with the answer from your sequential opt then its worth considering a more fully coupled solution approach. 
 
-# Nested Optimization Solutions
 
-If you want to use sub-optimization, you take one of two approaches: 
+# Our solutions: 
+## Top Level Optimization Scripts 
+* [Nested optimization with a sub-problem](./run_sequential_opt_using_subproblem.py)
+* [Sequential Optimization with sub-problem](./run_sequential_opt_using_subproblem.py)
 
-* Wrap up a chunk of your model into a sub-problem and then embed that into a component in a larger model 
-* Write your own custom optimization routine into the `compute` method of a component. 
+## Component impelmentations for the nested optimization
+* [sub-problem](./components/compute_pitch_angles_using_subproblem.py)
+* [Original solution given by John Jasa](./components/compute_pitch_angles.py)
+* [Solver based approach](./components/compute_pitch_angles_solver.py)
 
-We want to stress that BOTH of these approaches are reasonable! 
+
+# A theoretical discussion on nested optimizations
+
+## You can think of nested optimization as a form of Multi Disciplinary Feasbile (MDF) architecture
+
+The MDF architecture is typically thought of in terms of converging the governing equations for your analysis with a solver. 
+Thats an overly specific interpretation though. 
+More generally, MDF removes degrees of freedom from the top level problem by handing them to a well behaved sub-solver. 
+
+If that sub-solver happens to be a nonlinear solver and the degrees of freedom happen to be state variables for your analysis then you get the traditional view of MDF. 
+But its equally valid to think of the sub-solver as an optimizer and the degrees of freedom as the operational variables for your problem. 
+
+Generally speaking we know that the MDF solution approach tends to be slower but more reliably convergent, assuming you can reliably get a converged sub-problem for any design within the search space of the top level problem. 
+It seems reasonable to trade some performance for improved stability to us! 
+Just keep in mind that not every problem is well suited to an MDF style approach, and sometimes you can run into trouble if you can't get a reliably converged solution for your sub-problem. 
+
+## Thinking of a sub-optimizer as a sub-solver
+
+Regardless of what kind of optimizer you are using, one way to re-frame an optimization problem is to think of it as a nonlinear system. 
+In early calculus lectures, we all learned that you can find the inflection point of a function by taking its derivatives and solving for when that goes to 0. 
+Numerical optimizers are, broadly speaking, doing this exact same thing. 
+
+Lets assume that you want to minimize a continuous function, `f(x)` without any constraints. 
+From calculus we know that at that minimum point, `df_dx=0`. 
+If you have some way to compute `df_fx` then you can 
+a) use an optimizer 
+b) treat `df_dx=0` as a residual and use a solver. 
+
+Which is better? Well, using the optimizer might seem easier, especially because they almost always come with some way to internally approximate `df_dx` so you don't have to. 
+However, for the case of nested optimization the solver approach is well worth considering. 
+It offers greater numerical stability, and gives you the option of computing derivatives across the solved solution using OpenMDAO's analytic derivatives features. 
+
+The first trick to making this work is that you need to somehow construct this residual equation from the derivative. 
+The simplest way to do this is just to implement the finite-difference yourself: 
+
+```python 
+
+def compute_power(pitch_angle, wind_speed, drag_modifier):
+    CD = np.pi * drag_modifier * np.deg2rad(pitch_angle) ** 2
+    airfoil_power_boost = (drag_modifier - wind_speed * 2.0) ** 2.0 / 10.0
+    return -((wind_speed - CD) ** 3) - airfoil_power_boost
+
+def fd_dpower__dpitch_angle(pitch_angle, wind_speed, drag_modifier): 
+    '''central difference approximation of dpower__dpitch_angle'''
+
+    step = 1e-4
+    p = compute_power(pitch_angle, wind_speed, drag_modifier)
+    p_minus = compute_power(pitch_angle-step, wind_speed, drag_modifier)
+    p_plus = compute_power(pitch_angle+step, wind_speed, drag_modifier)
+
+    return p, (p_plus - p_minus)/(2*step)
+```
+
+Then you can pass that as your residual function to a solver like this: 
+
+```python 
+root = brentq(fd_dpower__dpitch_angle, -15, 15, 
+                          args=(wind_speed, drag_modifier))
+```
 
 
-# Solvers: Alternative to Nested Optimization
+### What about if you have constraints? then you need an optimizer, right? 
+Nope! There are lots of approaches to handling constraints, but let me first say some scary words that you should look into if you are interested in this topic: Augmented Lagrangian, KKT conditions, Lagrange multipliers, slack variables, active set, barrier functions
+
+Practically speaking, equality constraints are trivial. You just add them as additional residuals to be converged along with driving the derivative to 0. 
+Inequality constraints are a bit trickier, but sometimes you can get away with a simple trick where you conditionally evaluate different equations for the same residual. 
+There are some caveats, but this is a good tool to add to your toolbox. 
+
+```python
+def composite_residual(pitch_angle, wind_speed, drag_modifier, P_rated, return_power=False): 
+    ''' a "trick" to apply a constraint is to conditionally evaluate different residuals''' 
+
+    # NOTES: This trick works fine as long as one of two conditions is met: 
+    # 1) Your residuals are c1 continuous across the conditional 
+    # 2) Your residuals are c0 continuous and  you don't end up oscillating 
+    #     back and forth across the breakpoint in the conditional
+
+    power, d_power = fd_dpower__dpitch_angle(pitch_angle, wind_speed, drag_modifier)
+
+
+    if power < -P_rated: 
+        # NOTE: its usually beneficial to normalize your residuals by a reference quantity
+        R = (power-P_rated)/P_rated
+    else: 
+        R = d_power
+
+    if return_power: 
+        return R, power
+    else: 
+        return R
+```
+
+

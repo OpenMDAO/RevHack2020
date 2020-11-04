@@ -22,7 +22,7 @@ def fd_dpower__dpitch_angle(pitch_angle, wind_speed, drag_modifier):
 def composite_residual(pitch_angle, wind_speed, drag_modifier, P_rated, return_power=False): 
     ''' a "trick" to apply a constraint is to conditionally evaluate different residuals''' 
 
-    # NOTES: This "trick" works fine as long as one of two conditions is met: 
+    # NOTES: This trick works fine as long as one of two conditions is met: 
     # 1) Your residuals are c1 continuous across the conditional 
     # 2) Your residuals are c0 continuous and  you don't end up oscillating 
     #     back and forth across the breakpoint in the conditional
@@ -31,7 +31,8 @@ def composite_residual(pitch_angle, wind_speed, drag_modifier, P_rated, return_p
 
 
     if power < -P_rated: 
-        R = power-P_rated
+        # NOTE: its usually beneficial to normalize your residuals by a reference quantity
+        R = (power-P_rated)/P_rated
     else: 
         R = d_power
 
