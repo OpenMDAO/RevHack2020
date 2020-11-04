@@ -167,9 +167,10 @@ there is no reason that you can not choose it for yours!
  
 ## If sub-problems are useful, why did you take them out in V2 and V3?  
 
-They were dropped from V0 because that implementation wasn't really a sub-problem, as much as a special kind of opaque group (they were called Assemblies back then). 
+They were dropped from V0 because that implementation wasn't really a sub-problem, as much as a special kind of opaque group (they were called `Assemblies` back then). 
 These opaque groups created fundamental code structure problems that were not fixable. 
-I know that "opaque-group" vs. "sub-problem" does not give you a lot of details to work with, but suffice it to say that the former is a bad design and the latter a good one. 
+I know that "opaque group" vs. "sub-problem" does not give you a lot of details to work with, 
+but suffice it to say that the former is a bad design and the latter a good one. 
 In the rewrite from V0 to V1, so many things were more pressing to re-implement than sub-problems. 
 They stayed low on the priority list in large part because we didn't use them ourselves, 
 but also because we felt it was pretty easy for users to implement ad-hoc versions as needed. 
@@ -184,11 +185,11 @@ Again, since the ad-hoc option was available, it just never made it to the top o
 ## you can roll your own sub-problems
 
 The dev team assumed that ad-hoc implementations of sub-problems were fairly strait forward, 
-but the problem ideas we got submitted to RevHack 2020 universally did not mention them or user them. 
-So we've had revise re-evaluate our opinion on their strait forward-ness. 
+but the problem ideas we got submitted to RevHack 2020 universally regarded them as an open question. 
 
+So we've had revise re-evaluate our opinion on their strait forward-ness. 
 Our conclusion is that we need to, at the very least, 
-show some clear examples of how to implement them and express our support of them as a valid model building tool. 
+show some clear examples of how to implement them and express our support of them as a valid model building technique. 
 We'll be adding some sections to the docs on this topic, but in the meantime here is a quick primer: 
 
 ## Important OpenMDAO APIs for building sub-problems
