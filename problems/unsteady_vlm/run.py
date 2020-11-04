@@ -114,10 +114,8 @@ for p in range(num_of_angles):
 
         # Components before the time loop
 
-        for i in indep_vars:
-            root.add_subsystem(i[0],
-                    om.IndepVarComp(i[0], i[1]),
-                    promotes=['*'])
+        for name, val in indep_vars:
+            root.set_input_defaults(name, val)
         root.add_subsystem('tube',
                  MaterialsTube(n=num_y_sym),
                  promotes=['*'])
@@ -140,14 +138,6 @@ for p in range(num_of_angles):
             coupled.add_subsystem(name_step,
                         SingleStep(num_x, num_y_sym, num_w, E, G, mrho, fem_origin, SBEIG, t),
                         promotes=['*'])
-
-        # Set solver properties for the coupled group
-        coupled.ln_solver = om.ScipyKrylov()
-        coupled.ln_solver.options['iprint'] = 1
-        coupled.ln_solver.preconditioner = om.LinearBlockGS()
-
-        coupled.nl_solver = om.NonlinearBlockGS()
-        coupled.nl_solver.options['iprint'] = 1
 
         root.add_subsystem('coupled',
                  coupled,

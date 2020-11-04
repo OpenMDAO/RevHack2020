@@ -15,53 +15,34 @@ As Giovanni Pesare points out in his thesis, an unstead problem is made up of th
 2) The unsteady part
 3) A block of computations after the unsteady part
 
-The core of the proposed problem here is to examine the unsteady part of the problem. 
-That is the part that is the toughest to fit into the OpenMDAO paradigm. 
-Before we dive into that though, its important to consider the before and after blocks too. 
-If you want to optimize things, you have to connect these three chunks of calculations together, 
-and if you want to use gradient based optimization then you also have compute gradients across all three blocks. 
+![n2 diagram of the unsteady vlm](aerostruct.png)
 
-# The Unsteady Block 
+In this code, we can see that the before block includes the groups named `tube`, `mesh`, `matricies`, and `eig`. 
+The entire unsteady block is contained inside the `coupled` group (thats a weird name for that group since nothing is coupled, but we wanted to change the code as little as possible so we left it.)
+The after block is contained in the `vlm_funcs` group. 
 
-The very first thing you have to do when tackling an unsteady problem is pinpoint what kind of unsteady problem you want to solve: 
+The waterfall nature of this time loop clearly shows up in the N2 diagram above where each time step feeds directly into the next. 
+This style of unsteady model is not the most efficient way to set it up. 
+You have to keep all times in memory at once, but you're also constrained to evaluating all times in sequence. 
 
-## Unsteady Simulation
-The unifying characteristic of unsteady simulation is that they lack any time-varying control that you want to optimize. 
-This means that they are well defined mathematical problems that can fully solved given the boundary conditions. 
+A better approach would be to wrap the time-loop into a component that does the time-stepping for you with a sub-problem to hold the guts of the time-varying calculation. 
 
-While you absolutely can wrap an optimizer around these problems (often to vary one of the boundary conditions), 
-an optimizer is not necessary to solve them. 
+## Converting the analysis into a time-loop
 
-### Initial Value Problem: 
-Start with a known initial condition, and integrate to some fixed end time. 
-You've probably used something like scipy's [solve_ivp][1] handle this kind of problem. 
+In order to break the model down we needed to map the I/O from the *before block* into the time loop, 
+the i/o between each time step, and the i/o to the *after block* from the time loop. 
 
-Example: Given an initial angle and velocity, compute the trajectory of a cannonball. 
+### I/O: Before block -> time loop  
+Using the N2, we can see what the various inputs variables are: `dt`, `K_matrix`, `mesh`, `loads`, `rho`, `alpha`, `v`
 
+![n2 diagram inputs to the time-loop](aerostruct_inputs.png)
 
-### Boundary value Problem 
-Start with a known initial and final condition, and vary some parameter till the time history satisfies both of them. 
+### I/O: time_i -> time_i+1
 
-Example: Assuming an initial velocity, find the initial angle for the cannonball to be fired such that it travels 30 meters before hitting the ground. 
+Again, using the N2 diagram we can find the necessary data passing: 
+![variables passed between time-steps](aero_time_vars.png)
 
-
-## Optimal Control Problem 
-Mathematically, these problems can be posed as either IVP, BVP. 
-I am drawing a distinction though, because these involve time-varying controls and hence often benefit from a different kind of time-integration approach. 
-This makes them underdefined, so unlike simulation problems they can not be solved without an optimizer of some kind. 
-
-Said another way, the presence of the time-varying control adds additional degrees of freedom so that (even if given all the boundary conditions) there is no longer a single unique solution. 
-You must specify an objective that that will provide a unique solution. 
-
-Example: Given a cannonball with an on board gimbaled thruster, assuming an initial velocity, find the initial angle for the cannonball to be fired, and the schedule of thrust and thrust-angle such that it travels 30 meters before hitting the ground, touches the ground with 0 velocity, and uses the least amount of fuel. 
+### I/O: time loop -> after block
 
 
 
-# The problem posed here is a optimization around an unsteady simulation: 
-
-
-
-
-
-[0]: github.com/mdolab/openaerostruct
-[1]: https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.solve_ivp.html
