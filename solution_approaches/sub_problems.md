@@ -154,11 +154,10 @@ Then in the V2 re-write the sub-problem feature didn't get ported and still isn'
 
 Since we don't include the sub-problem feature in the main code base, 
 and we no longer give any examples of sub-optimizations anywhere in the docs it is understandable to think we don't want you use them.
-It is a reasonable conclusion, it is only half right. 
+It is a reasonable conclusion, but one that is only half right. 
 In our opinion monolithic optimization is better approach for most situations. 
-There are good numerical arguments against sub-optimization (e.g. its really hard to get analytic derivatives across a sub optimization), 
-but also many practical arguments against it too. 
-For example, the SLSQP implementation is scipy is non-reentrant which means that you can really nest instances of minimize within itself and be sure of correct behavior. 
+There are numerical arguments against sub-optimization (e.g. its really hard to get analytic derivatives across a sub optimization). 
+Also, for some optimizers (e.g. Scipy's SLSQP) it is not safe to nest multiple copies within eachother --- the code is non re-entrant, which means the multiple instances will stomp on eachother. 
 
 However, despite all the arguments that we could make against sub-optimizations, 
 lots of very good work on nested optimization has shown it has value. 
