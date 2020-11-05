@@ -227,7 +227,7 @@ prob.set_val('empty_cg', np.array([262.614, 0.0, 115.861]), units='cm')
 # Set Airspeeds for all models
 prob.set_val('ecrm.v', vels, units='mi/h')
 prob.set_val('ecrm.Mach_number', vels/767.0)
-prob.set_val('ecrm.alpha', np.array([0.0]))#, 7.0, 2.0]))
+prob.set_val('ecrm.alpha', np.array([3.0]))#, 7.0, 2.0]))
 
 # Initial VSP Design
 prob.set_val('wing_cord', 59.05128, units='cm')

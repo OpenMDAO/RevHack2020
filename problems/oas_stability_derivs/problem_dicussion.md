@@ -82,13 +82,22 @@ it to compute the derivatives.
 
 OpenMDAO doesn't have an "automatic" way to place problems into models. To do this, you need to create
 an `ExplicitComponent` that contains the subproblem and manages the passing of data. This isn't
-as difficult as it sounds, and this is one of the primary focuses of this
+as difficult as it sounds, and is one of the primary focuses that is documented in this solution.
 
 (Simple explanation with diagram goes here.)
 
 For our aircraft case, we want to compute and constrain the derivatives of aerodynamic variables with
-resepct to alpha and beta.
+resepct to alpha and beta. This means we need to encapsulate OpenAerostruct in the sub-problem.
+While we technically don't need the geometry to be included in the subproblem, since it is not
+involved in the calculation of the stability derivatives, we included it because it is more
+computationally efficient, as will be explained later.  Wrapping OpenVSP and incorporating it
+into an OpenAerostruct model is also explained in a later section.
 
+Here is the first part of the component.  It contains an attribute `self._problem` that holds the
+subproblem. This problem will only be setup once.
+
+The inputs include the three geometry inputs and the angle of attack "alpha". These will all design
+variables for the full optimization problem.  The rest of the inputs are constants.
 ```
 class ECRM(om.ExplicitComponent):
     """
@@ -146,7 +155,14 @@ class ECRM(om.ExplicitComponent):
         self.add_input('speed_of_sound', val=295.4, units='m/s')
         self.add_input('load_factor', val=1.)
         self.add_input('empty_cg', np.array([262.614, 0.0, 115.861]), units='cm')
-
+```
+Next are the outputs. We need "CL" and "CD" to compute the L/D objective for the optimization. We
+also need the "L_equals_W" output, which contains the value of the constraint where lift equals
+weight. We don't need to declare outputs for any OpenAerostruct variables that aren't part of the
+optimization problem, though if you want any other variables to be recorded for later study, you
+should include them as outputs here. Finally, we have outputs for the three stability derivatives
+that we need.
+```
         # Outputs
         self.add_output('CL', np.zeros(num_nodes))
         self.add_output('CD', np.zeros(num_nodes))
@@ -157,7 +173,8 @@ class ECRM(om.ExplicitComponent):
 
         self.add_output('L_equals_W', np.zeros(num_nodes))
 ```
-
+Next, we need to declare our partial derivatives. This is a little tricky, so let's consider the
+derivatives of the regular outputs first:
 ```
     def setup_partials(self):
         num_nodes = self.options['num_nodes']
@@ -169,18 +186,38 @@ class ECRM(om.ExplicitComponent):
         self.declare_partials(of=['CL', 'CD', 'L_equals_W'],
                               wrt=['alpha', 'v', 'Mach_number'],
                               rows=np.arange(num_nodes), cols=np.arange(num_nodes))
+```
+Here we define the derivatives of "C", "CD", and "L_equals_W" with respect to all inputs. We use
+two calls because these are vectors and have slightly different sparsity patterns. Declaring them
+here means that we are going to provide them in our "compute_partials" method.
 
+Next, let's look at the partial derivatives of the stability derivatives with respect to all
+inputs.
+```
         # But we also need derivatives of the stability derivatives.
         # Those can only be computed with FD.
         self.declare_partials(of=['CM_alpha', 'CL_alpha', 'CN_beta'],
                               wrt=['alpha', 'v', 'Mach_number', 'wing_cord',
                                    'vert_tail_area', 'horiz_tail_area'],
                               method='fd', step_calc='rel')
+```
+Notice that we are using finite difference to compute these. This is, again, because OpenMDAO
+cannot compute second derivatives. It is important to make sure that we only approximate the
+derivatives that we can't get analytically so that we are doing this as efficiently as we can.
+OpenMDAO can handle mixed-operation where some derivatives are analytic and some are finite
+difference. Note also that, if your model supports it, you can use complex step here for
+better accuracy.  We cannot because of OpenVSP.
 
+Next up is the compute function.
+```
     def compute(self, inputs, outputs):
         num_nodes = self.options['num_nodes']
         prob = self._problem
-
+```
+The first time we call compute, we build the problem. You can often do this earlier, and this code
+can possibly be moved to "setup" or "configure". Here, we build our sub-model, which contains VSP
+and OpenAerostruct. Then we call setup.
+```
         # Build the model the first time we run.
         if prob is None:
             opt = self.options
@@ -244,7 +281,12 @@ class ECRM(om.ExplicitComponent):
 
             prob.setup()
             self._problem = prob
-
+```
+The next sections of code run every time this component calls "Compute". The first thing we need to
+do is to set all of our input values. We pull these values from the inputs vector that is passed
+into our "compute". We do this every time with all of them, because we don't know which ones have
+changed.
+```
         # Set constants
         prob.set_val('beta', inputs['beta'])
         prob.set_val('re', inputs['re'])
@@ -260,22 +302,38 @@ class ECRM(om.ExplicitComponent):
         prob.set_val('wing_cord', inputs['wing_cord'])
         prob.set_val('vert_tail_area', inputs['vert_tail_area'])
         prob.set_val('horiz_tail_area', inputs['horiz_tail_area'])
-
+```
+In the next code block, we have three different cases we are looping over, one for each of three
+flight conditions that we are running independently.
+```
         for j in range(num_nodes):
 
             # Set new design values.
             prob.set_val('v', inputs['v'][j])
             prob.set_val('alpha', inputs['alpha'][j])
             prob.set_val('Mach_number', inputs['Mach_number'][j])
-
+```
+Next we run the sub problem.
+```
             # Run Problem
             prob.run_model()
-
+```
+Now we can extract the outputs from the subproblem and set them into our component outputs.
+```
             # Extract Outputs
             outputs['CL'][j] = prob.get_val('aero.CL')
             outputs['CD'][j] = prob.get_val('aero.CD')
             outputs['L_equals_W'][j] = prob.get_val('aero.L_equals_W')
+```
+Now, we just need the stability derivative outputs. To compute these, we need to prepare to
+calculate total derivatives on our sub-problem. While we calculate those outputs, we also
+calculate all the partial derivatives that those component can combine. The derivative
+of "CL" with respect to "alpha", for example, is needed both as an output and as a partial
+derivative on this component.
 
+With this in mind, we carefully assemble our list of input/output variables for the calculation
+of total derivatives.
+```
             if self._calc_stability_derivs:
 
                 # Compute all component derivatives.
@@ -283,19 +341,31 @@ class ECRM(om.ExplicitComponent):
                 of = ['aero.CL', 'aero.CD', 'aero.CM', 'aero.L_equals_W']
                 wrt = ['alpha', 'beta', 'v', 'Mach_number',
                        'wing_cord', 'vert_tail_area', 'horiz_tail_area']
-
+```
+And then we compute them.
+```
                 from time import time
                 t0 = time()
                 totals = prob.compute_totals(of=of, wrt=wrt)
                 print('OAS stability deriv time:', time() - t0)
-
+```
+The stability derivatives are extracted and passed into the component outputs.
+```
                 # Extract Stability Derivatives
                 outputs['CM_alpha'][j] = totals['aero.CM', 'alpha'][1, 0]
                 outputs['CL_alpha'][j] = totals['aero.CL', 'alpha'][0, 0]
                 outputs['CN_beta'][j] = totals['aero.CM', 'beta'][2, 0]
-
+```
+And finally, we save the dictionary of total derivatives because we will need to give these to
+OpenMDAO in "compute_partials."
+```
                 self._totals[j] = totals
+```
+And that's it for the "compute" method.
 
+In compute_partials, we just loop over the input/output pairs and set the elements of the
+jacobian in the "partials" dictionary.
+```
     def compute_partials(self, inputs, partials):
         num_nodes = self.options['num_nodes']
         ofs = ['CL', 'CD', 'L_equals_W']
@@ -308,6 +378,9 @@ class ECRM(om.ExplicitComponent):
                 for wrt in wrts:
                     partials[of, wrt][j] = self._totals[j][local_of, wrt]
 ```
+We don't need to do anything here for the derivatives of the stability derivatives with respect to
+the design variables because they will all be finite differenced.
+
 
 ## 2. Need an OpenMDAO component wrapper for OpenVSP.
 
