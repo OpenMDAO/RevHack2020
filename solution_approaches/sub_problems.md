@@ -73,7 +73,13 @@ It is important to note that you don't always need to use a sub-problem,
 even if you are planning to do some sub-optimization. 
 If you have a stand along chunk of code that isn't already integrated as an OpenMDAO model, then adding a problem wrapper around it seems unnecessary. 
 Here is an example submitted by John Jasa for RevHack 2020, that does not use sub-problems and doesn't really need to. 
+Why not? Because the underlying code is very simple; If you're just dealing with a single function call, 
+then there is little in wrapping that function in an OpenMDAO problem. 
 *(Note: in our solutions we converted this to use sub-problems to serve as a demonstration of how to do it... but not to say that we think it should always be done that way.)*
+
+So whether or not to use a sub-problem really comes down to the complexity of the model you want to encapsulate. 
+If you already have a group set up that you want to work with, sub-problems make a lot of sense. 
+If, instead, you have a small chunk of stand alone code, they may not buy you anything. 
 
 ```python 
 import numpy as np
@@ -148,11 +154,10 @@ Then in the V2 re-write the sub-problem feature didn't get ported and still isn'
 
 Since we don't include the sub-problem feature in the main code base, 
 and we no longer give any examples of sub-optimizations anywhere in the docs it is understandable to think we don't want you use them.
-It is a reasonable conclusion, it is only half right. 
+It is a reasonable conclusion, but one that is only half right. 
 In our opinion monolithic optimization is better approach for most situations. 
-There are good numerical arguments against sub-optimization (e.g. its really hard to get analytic derivatives across a sub optimization), 
-but also many practical arguments against it too. 
-For example, the SLSQP implementation is scipy is non-reentrant which means that you can really nest instances of minimize within itself and be sure of correct behavior. 
+There are numerical arguments against sub-optimization (e.g. its really hard to get analytic derivatives across a sub optimization). 
+Also, for some optimizers (e.g. Scipy's SLSQP) it is not safe to nest multiple copies within eachother --- the code is non re-entrant, which means the multiple instances will stomp on eachother. 
 
 However, despite all the arguments that we could make against sub-optimizations, 
 lots of very good work on nested optimization has shown it has value. 
@@ -162,9 +167,10 @@ there is no reason that you can not choose it for yours!
  
 ## If sub-problems are useful, why did you take them out in V2 and V3?  
 
-They were dropped from V0 because that implementation wasn't really a sub-problem, as much as a special kind of opaque group (they were called Assemblies back then). 
+They were dropped from V0 because that implementation wasn't really a sub-problem, as much as a special kind of opaque group (they were called `Assemblies` back then). 
 These opaque groups created fundamental code structure problems that were not fixable. 
-I know that "opaque-group" vs. "sub-problem" does not give you a lot of details to work with, but suffice it to say that the former is a bad design and the latter a good one. 
+I know that "opaque group" vs. "sub-problem" does not give you a lot of details to work with, 
+but suffice it to say that the former is a bad design and the latter a good one. 
 In the rewrite from V0 to V1, so many things were more pressing to re-implement than sub-problems. 
 They stayed low on the priority list in large part because we didn't use them ourselves, 
 but also because we felt it was pretty easy for users to implement ad-hoc versions as needed. 
@@ -179,11 +185,11 @@ Again, since the ad-hoc option was available, it just never made it to the top o
 ## you can roll your own sub-problems
 
 The dev team assumed that ad-hoc implementations of sub-problems were fairly strait forward, 
-but the problem ideas we got submitted to RevHack 2020 universally did not mention them or user them. 
-So we've had revise re-evaluate our opinion on their strait forward-ness. 
+but the problem ideas we got submitted to RevHack 2020 universally regarded them as an open question. 
 
+So we've had revise re-evaluate our opinion on their strait forward-ness. 
 Our conclusion is that we need to, at the very least, 
-show some clear examples of how to implement them and express our support of them as a valid model building tool. 
+show some clear examples of how to implement them and express our support of them as a valid model building technique. 
 We'll be adding some sections to the docs on this topic, but in the meantime here is a quick primer: 
 
 ## Important OpenMDAO APIs for building sub-problems

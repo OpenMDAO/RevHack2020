@@ -14,7 +14,7 @@ What you get out of it is two fold:
 * OpenAeroStruct+VSP to optimize an aircraft subject stability constraints
 * [eVTOL takeoff optimization with Dymos][prob-evtol]
 * [Nested optimizations][prob-nested]
-* Optimize an OpenMDAO model with CMA-ES optimizer 
+* [Optimize an OpenMDAO model with CMA-ES optimizer][prob-cma_es]
 * [Unsteady VLM simulation][prob-unsteady-vlm]
 
 ### The ones we didn't get to
@@ -40,3 +40,4 @@ These topics involve general model building practices and concepts, and don't de
 [prob-evtol]: ./problems/evtol_trajectory
 [prob-nested]: ./problems/nested_optimization
 [prob-unsteady-vlm]: ./problems/unsteady_vlm
+[prob-cma_es]: ./problems/cma_es
