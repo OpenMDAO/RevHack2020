@@ -65,7 +65,7 @@ class VSPeCRM(om.ExplicitComponent):
         vsp.SetParmVal(self.wing_id, "TotalChord", "WingGeom", inputs['wing_cord'][0])
 
         vsp.Update()
-        vsp.Update()  # just in case..
+        #vsp.Update()  # just in case..
 
         # run degen geom to get measurements
         dg:degen_geom.DegenGeomMgr = vsp.run_degen_geom(set_index=vsp.SET_ALL)
