@@ -58,4 +58,91 @@ force_pts + mesh --> force_pts_velocities.
 - Don't need intermediate calcs for anything else.
 - They are huge (216 x 12 x 17 x 3)
 
-Baring that, should the surfaces be solved by independent VL calculations instead of all together
+Barring that, should the surfaces be solved by independent VL calculations instead of all together
+
+Normal Way
+OAS stability deriv time: 8.344069242477417
+stability derivs
+CM_alpha [-0.2959168]
+CL_alpha [0.07197423]
+CN_beta [0.27372895]
+
+Setup time: 0.0021522045135498047
+Run time: 11.343416690826416
+done
+
+Coloring - numbers are wrong
+OAS stability deriv time: 24.654993295669556
+stability derivs
+CM_alpha [-0.29591672]
+CL_alpha [0.07197422]
+CN_beta [0.27372769]
+
+Setup time: 0.0022094249725341797
+Run time: 34.72225594520569
+done
+
+
+
+
+----------------
+Design Variables
+----------------
+name            value  size
+--------------  -----  ----
+wing_cord       [75.]  1
+ecrm_150.alpha  [14.]  1
+
+-----------
+Constraints
+-----------
+name                     value         size
+-----------------------  ------------  ----
+con_alpha_150.val        [0.05609402]  1
+par.ecrm_150.CN_beta     [0.01088005]  1
+par.ecrm_150.CL          [1.06849623]  1
+par.ecrm_150.L_equals_W  [-2.6467711]  1
+
+----------
+Objectives
+----------
+name          value          size
+------------  -------------  ----
+l_over_d.val  [-11.5061441]  1
+
+
+150 success
+
+----------------
+Design Variables
+----------------
+name             value         size
+---------------  ------------  ----
+wing_cord        [1.21862888]  1
+vert_tail_area   [3.10537502]  1
+horiz_tail_area  [0.60370382]  1
+ecrm.alpha       [2.7799519]   1
+
+-----------
+Constraints
+-----------
+name             value              size
+---------------  -----------------  ----
+con_alpha.val    [1.32696023e-10]   1
+ecrm.CN_beta     [-1.76933121e-12]  1
+ecrm.CL          [1.3]              1
+ecrm.L_equals_W  [1.36890499e-13]   1
+
+----------
+Objectives
+----------
+name          value           size
+------------  --------------  ----
+l_over_d.val  [-16.59593442]  1
+
+ecrm.alpha [13.89975949]
+wing_cord [71.8991041]
+vert_tail_area [7126.83567871]
+horiz_tail_area [3825.06741167]
+done
+
