@@ -178,16 +178,17 @@ class ECRM(om.ExplicitComponent):
         prob.set_val('load_factor', inputs['load_factor'])
         prob.set_val('empty_cg', inputs['empty_cg'])
 
+        # Design inputs don't vary over cases.
+        prob.set_val('wing_cord', inputs['wing_cord'])
+        prob.set_val('vert_tail_area', inputs['vert_tail_area'])
+        prob.set_val('horiz_tail_area', inputs['horiz_tail_area'])
+
         for j in range(num_nodes):
 
             # Set new design values.
             prob.set_val('v', inputs['v'][j])
             prob.set_val('alpha', inputs['alpha'][j])
             prob.set_val('Mach_number', inputs['Mach_number'][j])
-
-            prob.set_val('wing_cord', inputs['wing_cord'])
-            prob.set_val('vert_tail_area', inputs['vert_tail_area'])
-            prob.set_val('horiz_tail_area', inputs['horiz_tail_area'])
 
             # Run Problem
             prob.run_model()

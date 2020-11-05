@@ -158,7 +158,8 @@ vert_tail_surface = {
 }
 
 #vels = np.array([70.0])                    # Test run
-vels = np.array([150.0, 125.0, 175.0])       # Full run
+#vels = np.array([150.0, 70.0, 200.0])      # Actual full run
+vels = np.array([150.0, 155.0, 160.0])     # Demonstration run
 num_nodes = len(vels)
 
 prob = om.Problem()
@@ -226,7 +227,7 @@ prob.set_val('empty_cg', np.array([262.614, 0.0, 115.861]), units='inch')
 # Set Airspeeds for all models
 prob.set_val('ecrm.v', vels, units='mi/h')
 prob.set_val('ecrm.Mach_number', vels/767.0)
-prob.set_val('ecrm.alpha', np.array([1.0]))#, 7.0, 2.0]))
+prob.set_val('ecrm.alpha', np.array([13.0]))#, 7.0, 2.0]))
 
 # Initial VSP Design
 prob.set_val('wing_cord', 59.05128, units='inch')

@@ -19,7 +19,7 @@ wing weight, subject to Cn-beta and Cm-alpha constraints. We can provide baselin
 
 # Optimization Problem
 
-Problem: eCRM-001 Wing/Tail but with addition of dihedral to wing
+Problem: eCRM-001 Wing/Vertical Tail/Horizontal Tail but with addition of dihedral to wing
 
 Objective: Maximize L/D @ 150 mph
 
@@ -39,7 +39,7 @@ Design Variables:
 
 **VSP**
 
-Installing vsp is covered in this [document](openmdao_with_vsp.md)
+Installing vsp is covered in this [document.](openmdao_with_vsp.md)
 
 **OpenAerostruct**
 
@@ -52,33 +52,27 @@ the conclusion of the reverse-hackathon.
 
 # Overall Approach
 
-
-
-We felt that it made the most sense to implement this using a subproblem contained inside of a
-Group. The subproblem contains an OpenMDAO problem that runs an OpenAerostruct model to compute
-the aerodynamic forces and moments, and then performs a compute_totals to calculate the stability
-derivatives which are the derivatives of some of the aircraft forces and moments with respect to
-alpha and beta.  OAS provides efficient analytic derivatives, but VSP does not, so the VSP
-component will compute its partial derivatives using finite difference.
-
-We want to constrain the stability derivatives computed at three different operating speeds, so we
-need three instances of the OAS-containing-component. These calculations don't depend on each
-other, so they can be placed in a ParallelGroup, and the optimization can be run under MPI with
-three processors.
-
-In the top level optimization, we need derivatives of the stability derivatives with respect to
-all of the design variables. In effect, we need the second derivartives of aerodynamic forces
-and moments with respect to alpha and beta, so the component that contains the OAS subproblem
-will compute its derivatives with finite-difference. (Complex step won't work here for several
-reasons: VSP doesn't support complex inputs; openmdao models don't support complex inputs and
-outputs for execution or computing total derivatives.
+In the proposed optimization problem, we want to apply constraints to stability derivatives. The
+stability derivatives that we need are the derivatives of aerodynamic forces with respect to angle
+of attack (alpha) and sidesplip angle (beta).  OpenMDAO can compute these derivatives, however
+there is no way to use the derivatives inside of a model. Moreover, to use a derivative as a constraint,
+you also need its derivatives, which are the second derivatives of the aero forces with respect
+to alpha and beta. The way to accomplish this in OpenMDAO is to use a nested Problem.
 
 # Challenges
 
-## 1. Modifying OpenAerostruct to use VSP as the geometry provider.
+## 1. Need an OpenMDAO component wrapper for OpenVSP.
 
-## 2. Providing a deformed mesh to OpenAerostruct in the form it expects.
+## 2. OpenVSP's point cloud is not in the form OpenAerostruct expects.
 
-## 3. OpenAerostruct scales poorly with large mesh sizes.
+## 3. OpenAerostruct does not directly support pluggable geometry providers.
 
-## 4.
+## 4. OpenAerostruct scales poorly with large mesh sizes.
+
+## 5. Multiple VSP instances can't run in the same model.
+
+## 6. It is important to correctly set all inputs values for OpenAerostruct.
+
+## 7. The optimization problem has its own challenges.
+
+# Solution
