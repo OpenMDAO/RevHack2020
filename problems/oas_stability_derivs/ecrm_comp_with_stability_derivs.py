@@ -56,7 +56,7 @@ class ECRM(om.ExplicitComponent):
         self.add_input('Mach_number', val=0.1 * np.ones(num_nodes))
 
         # VSP Geometry Parameters
-        self.add_input('wing_cord', val=59.05128, units='inch**2')
+        self.add_input('wing_cord', val=59.05128, units='inch')
         self.add_input('vert_tail_area', val=2295., units='inch**2')
         self.add_input('horiz_tail_area', val=6336., units='inch**2')
 
@@ -97,7 +97,7 @@ class ECRM(om.ExplicitComponent):
         self.declare_partials(of=['CM_alpha', 'CL_alpha', 'CN_beta'],
                               wrt=['alpha', 'v', 'Mach_number', 'wing_cord',
                                    'vert_tail_area', 'horiz_tail_area'],
-                              method='fd')
+                              method='fd', step_calc='rel')
 
     def compute(self, inputs, outputs):
         num_nodes = self.options['num_nodes']
@@ -149,10 +149,10 @@ class ECRM(om.ExplicitComponent):
                 prob.model.connect(f'geo.{name}.local_stiff_transformed', f'aero.coupled.{name}.local_stiff_transformed')
                 prob.model.connect(f'geo.{name}.nodes', f'aero.coupled.{name}.nodes')
 
-                ## Connect aerodyamic mesh to coupled group mesh
+                # Connect aerodyamic mesh to coupled group mesh
                 prob.model.connect(f'geo.{name}_mesh', f'aero.coupled.{name}.mesh')
 
-                ## Connect performance calculation variables
+                # Connect performance calculation variables
                 for vname in ['radius', 'thickness', 'nodes']:
                     prob.model.connect(f'geo.{name}.{vname}', f'aero.{name}_perf.{vname}')
 
@@ -168,6 +168,7 @@ class ECRM(om.ExplicitComponent):
             self._problem = prob
 
         # Set constants
+        prob.set_val('beta', inputs['beta'])
         prob.set_val('re', inputs['re'])
         prob.set_val('rho', inputs['rho'])
         prob.set_val('CT', inputs['CT'])
@@ -182,7 +183,6 @@ class ECRM(om.ExplicitComponent):
             # Set new design values.
             prob.set_val('v', inputs['v'][j])
             prob.set_val('alpha', inputs['alpha'][j])
-            prob.set_val('beta', inputs['beta'])
             prob.set_val('Mach_number', inputs['Mach_number'][j])
 
             prob.set_val('wing_cord', inputs['wing_cord'])

@@ -33,7 +33,7 @@ wing_surface = {
     'twist_cp': np.zeros((1)),
     'mesh': wing_mesh,
 
-    'thickness_cp' : np.array([.1, .25]),
+    'thickness_cp' : np.array([.01, .05]),
 
     # Aerodynamic performance of the lifting surface at
     # an angle of attack of 0 (alpha=0).
@@ -211,6 +211,7 @@ prob.setup()
 prob.set_val('beta', 0.0, units='deg')
 prob.set_val('re', 1.0e6, units='1/m')
 prob.set_val('rho', 1.225, units='kg/m**3')
+#prob.set_val('rho', 0.625, units='kg/m**3')
 prob.set_val('CT', grav_constant * 17.e-6, units='1/s')
 prob.set_val('R', 50, units='km')
 prob.set_val('W0', 1000.0,  units='kg')
@@ -219,14 +220,20 @@ prob.set_val('speed_of_sound', 767.0, units='mi/h')
 prob.set_val('empty_cg', np.array([262.614, 0.0, 115.861]), units='inch')
 
 # Set Initial Conditions 150 mph model
-prob.set_val('ecrm_150.v', 100.0, units='mi/h')
-prob.set_val('ecrm_150.Mach_number', 100.0/767)
+prob.set_val('ecrm_150.v', 150.0, units='mi/h')
+prob.set_val('ecrm_150.Mach_number', 150.0/767)
 prob.set_val('ecrm_150.alpha', 3.0)
 
 # Initial Design
 prob.set_val('wing_cord', 59.05128)
 prob.set_val('vert_tail_area', 2295.0)
 prob.set_val('horiz_tail_area', 6336.0)
+
+#{'ecrm.alpha': array([1.3266714]),
+ #'horiz_tail_area': array([15852.40061693]),
+ #'vert_tail_area': array([5549.2437398]),
+ #'wing_cord': array([50.39181606])}
+
 
 #prob.run_model()
 #z=prob.check_totals()

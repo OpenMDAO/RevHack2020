@@ -41,7 +41,7 @@ wing_surface = {
     # obtained from aerodynamic analysis of the surface to get
     # the total CL and CD.
     # These CL0 and CD0 values do not vary wrt alpha.
-    'CL0' : 0.1,            # CL of the surface at alpha=0
+    'CL0' : 0.5,            # CL of the surface at alpha=0
     'CD0' : 0.015,          # CD of the surface at alpha=0
 
     # Airfoil properties for viscous drag calculation
@@ -157,8 +157,8 @@ vert_tail_surface = {
     'exact_failure_constraint' : False, # if false, use KS function
 }
 
-#vels = np.array([150.0])                    # Test run
-vels = np.array([150.0, 100.0, 200.0])       # Full run
+#vels = np.array([70.0])                    # Test run
+vels = np.array([150.0, 125.0, 175.0])       # Full run
 num_nodes = len(vels)
 
 prob = om.Problem()
@@ -197,22 +197,25 @@ model.add_constraint('ecrm.CL', upper=1.3)
 model.add_constraint('ecrm.L_equals_W', equals=0.0)
 
 # Design Variables
-model.add_design_var('wing_cord', lower=40.0, upper=90.0, ref=90.0)
-model.add_design_var('vert_tail_area', lower=1000.0, upper=4000.0, ref=4000.0)
-model.add_design_var('horiz_tail_area', lower=4000, upper=8000, ref=8000.0)
-model.add_design_var('ecrm.alpha', lower=-1.0, upper=22.0, ref=14.0)
+model.add_design_var('wing_cord', lower=20.0, upper=100, ref=59.0)
+model.add_design_var('vert_tail_area', lower=1000.0, ref=2295.0)
+model.add_design_var('horiz_tail_area', lower=1000.0, ref=6336.0)
+model.add_design_var('ecrm.alpha', lower=-2.0, upper=22.0, ref=5.0)
 
 prob.driver = om.pyOptSparseDriver()
 prob.driver.options['optimizer'] = "SNOPT"
 prob.driver.options['debug_print'] = ['desvars', 'nl_cons', 'objs']
-prob.driver.opt_settings['Major feasibility tolerance'] = 1e-5
+prob.driver.opt_settings['Major feasibility tolerance'] = 1e-3
+prob.driver.opt_settings['Major optimality tolerance'] = 1e-5
 
 prob.setup()
 
 # Set Constant Initial Conditions
 prob.set_val('beta', 0.0, units='deg')
 prob.set_val('re', 1.0e6, units='1/m')
-prob.set_val('rho', 1.225, units='kg/m**3')
+#prob.set_val('rho', 1.225, units='kg/m**3')
+#prob.set_val('rho', 1.0, units='kg/m**3')
+prob.set_val('rho', 0.38, units='kg/m**3')
 prob.set_val('CT', grav_constant * 17.e-6, units='1/s')
 prob.set_val('R', 50.0, units='km')
 prob.set_val('W0', 1000.0,  units='kg')
@@ -223,10 +226,10 @@ prob.set_val('empty_cg', np.array([262.614, 0.0, 115.861]), units='inch')
 # Set Airspeeds for all models
 prob.set_val('ecrm.v', vels, units='mi/h')
 prob.set_val('ecrm.Mach_number', vels/767.0)
-prob.set_val('ecrm.alpha', np.array([5.0, 12.0, 1.0]))
+prob.set_val('ecrm.alpha', np.array([1.0]))#, 7.0, 2.0]))
 
 # Initial VSP Design
-prob.set_val('wing_cord', 59.05128, units='inch**2')
+prob.set_val('wing_cord', 59.05128, units='inch')
 prob.set_val('vert_tail_area', 2295.0, units='inch**2')
 prob.set_val('horiz_tail_area', 6336.0, units='inch**2')
 

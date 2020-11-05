@@ -52,6 +52,8 @@ the conclusion of the reverse-hackathon.
 
 # Overall Approach
 
+
+
 We felt that it made the most sense to implement this using a subproblem contained inside of a
 Group. The subproblem contains an OpenMDAO problem that runs an OpenAerostruct model to compute
 the aerodynamic forces and moments, and then performs a compute_totals to calculate the stability
@@ -78,3 +80,5 @@ outputs for execution or computing total derivatives.
 ## 2. Providing a deformed mesh to OpenAerostruct in the form it expects.
 
 ## 3. OpenAerostruct scales poorly with large mesh sizes.
+
+## 4.
