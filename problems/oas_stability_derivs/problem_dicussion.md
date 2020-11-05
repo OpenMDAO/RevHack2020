@@ -24,16 +24,16 @@ Problem: eCRM-001 Wing/Vertical Tail/Horizontal Tail but with addition of dihedr
 Objective: Maximize L/D @ 150 mph
 
 Constraints @ 70 mph, 150 mph, 200 mph:
-  -CM_α/CL_α > 0.0
-  CN_β > 0.0
-  CL < 1.3
-  CL = W/qS
+* -CM_α/CL_α > 0.0
+*  CN_β > 0.0
+*  CL < 1.3
+*  CL = W/qS
 
 Design Variables:
-  Vertical Tail Area
-  Horizontal Tail Area
-  Wing Chord
-  α @ each speed
+*  Vertical Tail Area
+*  Horizontal Tail Area
+*  Wing Chord
+*  α @ each speed
 
 # Tools Needed
 
