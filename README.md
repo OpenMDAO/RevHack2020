@@ -26,7 +26,7 @@ What you get out of it is two fold:
 Over the course of solving the problems we noticed a few general themes that were worth discussing in more detail.
 These topics involve general model building practices and concepts, and don't deal with specific solutions. 
 
-* [Building an OpenVSP Component][openvsp] -- Google Collab workbook that shows you how to link OpenVSP to OpenMDAO
+* [Building an OpenVSP Component][openvsp] -- Google Collab workbook that builds an OpenVSP component
 * [You don't have to use a driver!][no-driver] -- Exploit the parts you like, leave the parts you don't! 
 * [Sub-problems][subproblem] -- they are pretty handy in some situations! 
 * [How big should I make my components?][how-big] --- How many lines of code should I aim for? 
