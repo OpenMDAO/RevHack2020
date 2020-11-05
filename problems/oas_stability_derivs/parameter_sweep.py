@@ -217,7 +217,7 @@ prob.set_val('R', 50, units='km')
 prob.set_val('W0', 1000.0,  units='kg')
 prob.set_val('load_factor', 1.)
 prob.set_val('speed_of_sound', 767.0, units='mi/h')
-prob.set_val('empty_cg', np.array([262.614, 0.0, 115.861]), units='inch')
+prob.set_val('empty_cg', np.array([262.614, 0.0, 115.861]), units='cm')
 
 # Set Initial Conditions 150 mph model
 prob.set_val('ecrm_150.v', 150.0, units='mi/h')

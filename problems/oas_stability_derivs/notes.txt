@@ -146,3 +146,23 @@ vert_tail_area [7126.83567871]
 horiz_tail_area [3825.06741167]
 done
 
+
+Latest:
+
+-------------------------------------------------------------
+Design Vars
+{'ecrm.alpha': array([15.70811467, 14.62857619, 13.50798867]),
+ 'horiz_tail_area': array([10634.97745041]),
+ 'vert_tail_area': array([7970.37699252]),
+ 'wing_cord': array([79.89429342])}
+
+
+Nonlinear constraints
+{'con_alpha.val': array([1.30776822, 1.05382635, 0.08375099]),
+ 'ecrm.CL': array([1.30000001, 1.2163612 , 1.14054028]),
+ 'ecrm.CN_beta': array([4.71807971e-07, 9.99560179e-02, 4.76336253e-02]),
+ 'ecrm.L_equals_W': array([-6.87998214e-09,  2.27426051e-08,  4.41431052e-08])}
+
+Objectives
+{'l_over_d.val': array([-12.69082787])}
+
