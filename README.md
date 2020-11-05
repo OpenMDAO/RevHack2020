@@ -37,7 +37,7 @@ These topics involve general model building practices and concepts, and don't de
 [subproblem]: ./solution_approaches/sub_problems.md
 [unsteady]: ./solution_approaches/unsteady_analysis.md
 [how-big]: ./solution_approaches/how_big.md
-[openvsp]: ./solution_approaches/OpenVSPwithOpenMDAO.ipynb
+[openvsp]: ./solution_approaches/OpenVSP_OpenMDAO/OpenVSPwithOpenMDAO.ipynb
 
 [prob-evtol]: ./problems/evtol_trajectory
 [prob-nested]: ./problems/nested_optimization
