@@ -157,7 +157,7 @@ vert_tail_surface = {
     'exact_failure_constraint' : False, # if false, use KS function
 }
 
-vels = np.array([150.0])                    # Test run
+vels = np.array([160.0])                    # Test run
 #vels = np.array([150.0, 70.0, 200.0])      # Actual full run
 #vels = np.array([150.0, 155.0, 160.0])     # Demonstration run
 num_nodes = len(vels)

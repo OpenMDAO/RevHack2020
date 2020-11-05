@@ -166,3 +166,37 @@ Nonlinear constraints
 Objectives
 {'l_over_d.val': array([-12.69082787])}
 
+First success after fixing in->cm
+
+----------------
+Design Variables
+----------------
+name             value         size
+---------------  ------------  ----
+wing_cord        [0.72549972]  1
+vert_tail_area   [1.93444894]  1
+horiz_tail_area  [1.56043722]  1
+ecrm.alpha       [2.1058682]   1
+
+-----------
+Constraints
+-----------
+name             value             size
+---------------  ----------------  ----
+con_alpha.val    [3.93089981e-13]  1
+ecrm.CN_beta     [4.79397771e-13]  1
+ecrm.CL          [0.77304843]      1
+ecrm.L_equals_W  [4.00790512e-14]  1
+
+----------
+Objectives
+----------
+name          value           size
+------------  --------------  ----
+l_over_d.val  [-12.91291605]  1
+
+ecrm.alpha [10.529341]
+wing_cord [42.8044836]
+vert_tail_area [4439.56031413]
+horiz_tail_area [9886.93021249]
+done
