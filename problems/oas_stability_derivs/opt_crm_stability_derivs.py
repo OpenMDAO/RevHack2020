@@ -41,7 +41,7 @@ wing_surface = {
     # obtained from aerodynamic analysis of the surface to get
     # the total CL and CD.
     # These CL0 and CD0 values do not vary wrt alpha.
-    'CL0' : 0.7,            # CL of the surface at alpha=0
+    'CL0' : 0.2,            # CL of the surface at alpha=0
     'CD0' : 0.015,          # CD of the surface at alpha=0
 
     # Airfoil properties for viscous drag calculation
@@ -157,9 +157,9 @@ vert_tail_surface = {
     'exact_failure_constraint' : False, # if false, use KS function
 }
 
-#vels = np.array([70.0])                    # Test run
+vels = np.array([150.0])                    # Test run
 #vels = np.array([150.0, 70.0, 200.0])      # Actual full run
-vels = np.array([150.0, 155.0, 160.0])     # Demonstration run
+#vels = np.array([150.0, 155.0, 160.0])     # Demonstration run
 num_nodes = len(vels)
 
 prob = om.Problem()
@@ -219,7 +219,7 @@ prob.set_val('rho', 1.225, units='kg/m**3')
 #prob.set_val('rho', 0.38, units='kg/m**3')
 prob.set_val('CT', grav_constant * 17.e-6, units='1/s')
 prob.set_val('R', 50.0, units='km')
-prob.set_val('W0', 1000.0,  units='kg')
+prob.set_val('W0', 1500.0,  units='kg')
 prob.set_val('load_factor', 1.)
 prob.set_val('speed_of_sound', 767.0, units='mi/h')
 prob.set_val('empty_cg', np.array([262.614, 0.0, 115.861]), units='cm')

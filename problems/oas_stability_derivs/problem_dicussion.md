@@ -4,14 +4,14 @@
 novel OpenMDAO problem because it requires constraining derivatives of components, not just
 values themselves.
 
-* We envision using OpenAeroStruct (since it has analytical derivatives) to drive parameters such as
+* We envision using OpenAerostruct (since it has analytical derivatives) to drive parameters such as
 dihedral and taper ratio to some objective (weight, range, etc.,) subject to stability derivatives
 (Cnbeta, Cmalpha, etc.) being greater than some value.
 
 * The aero stability equations are straightforward - they're the derivatives of each 6 forces and
 moments with respect to alpha, beta, rotation rates, velocity, and control surface deflections.
 
-* We don't think OpenAeroStruct has roll rates or control surface deflections, so this example could
+* We don't think OpenAerostruct has roll rates or control surface deflections, so this example could
 just be alpha, beta, and freestream velocity.
 
 * We view the test problem as having a dihedral wing and a V-tail. The objective would be to minimize
@@ -63,6 +63,9 @@ to alpha and beta. The way to accomplish this in OpenMDAO is to use a nested Pro
 
 ## 1. How can OpenMDAO provide derivatives to use as outputs.
 
+This problem was proposed to the workshop in order to answer the question of how to compute
+total derivatives of part of your model and use them for later calculation in OpenMDAO.
+
 ## 2. Need an OpenMDAO component wrapper for OpenVSP.
 
 We were provided with an OpenVSP model of the eCRM-001 aerodynamic surfaces including the wing, the
@@ -76,7 +79,7 @@ each tail. The OpenMDAO component exposes these as inputs to allow the optimizer
 component outputs a mesh for each aerodynamic surface. These meshes will be passed directly to
 the structural and aerodynamic analyses inside of OpenAerostruct.
 
-Here is the `initialize` and setup `methods` of the OpenVSP component.
+Here are the `initialize` and `setup` methods of the OpenVSP component.
 ```
 import itertools
 import pickle
@@ -134,10 +137,12 @@ class VSPeCRM(om.ExplicitComponent):
         self.declare_partials(of='*', wrt='*', method='fd')
 ```
 The geometry file is read in during setup. Notice that this component will use finite difference
-to calculate its partial derivatives. OpenVSP does not provide analtyic derivatives and does not
-support complex inputs.
+to calculate its partial derivatives. OpenVSP does not provide analytic derivatives and does not
+support complex inputs, so fd is the only option.  VSP runs pretty quickly, and the component only
+has three inputs, so the derivative computation won't be a bottlneck. Also, the rest of
+OpenAerostruct will continue to use analytic derivatives.
 
-
+Next is the `compute` method:
 ```
     def compute(self, inputs, outputs, discrete_inputs=None, discrete_outputs=None):
         # Set values.
@@ -162,8 +167,80 @@ support complex inputs.
         degen_obj: degen_geom.DegenGeom = obj_dict[self.options['vert_tail_name']]
         vert_cloud = self.vsp_to_point_cloud(degen_obj)
 ```
+Here, we set the geometry parameter values into VSP, and then call `run_degen_geom` to compute
+the deformed geometry. Extracting a point cloud for each surface is done by:
+```
+    def vsp_to_point_cloud(self, degen_obj: degen_geom.DegenGeom)->np.ndarray:
+        npts = degen_obj.surf.num_pnts
+        n_xsecs = degen_obj.surf.num_secs
+
+        points = np.empty((npts * n_xsecs, 3))
+        points[:, 0] = list(itertools.chain.from_iterable(degen_obj.surf.x))
+        points[:, 1] = list(itertools.chain.from_iterable(degen_obj.surf.y))
+        points[:, 2] = list(itertools.chain.from_iterable(degen_obj.surf.z))
+
+        return points
+```
+The point clouds now need to be converted into a mesh array that can be used by OpenAerostruct.
 
 ## 3. OpenVSP's point cloud is not in the form OpenAerostruct expects.
+
+From OpenVSP we have extracted a cloud of points for each aerodynamic surface. These aren't just
+random fields of points though. The points of each cross section from the tip to the symmetry
+plane are stored sequentially, so some reshaping and reordering is needed to prepare them for
+OpenAerostruct, which expects a three-dimensional array where the first dimension is chord-wise
+and the second is span-wise.
+
+The OpenVSP meshes are also too large for OpenAerostruct to effectively handle. The reason for
+this will be discussed further below, but it is also important to recognize that the level of
+fidelity for the vortex lattice and simple structural solver are mor conducive to smaller mesh
+sizes. We reduce the number of mesh points by taking every second or fourth point where symmetry
+allows. We had to skip a point near the back of the wing because the mesh couldn't be subdivided
+by four in that direction.
+
+Finally, the VSP surface is actually 3-dimensional, and the point cloud includes the points on
+both the upper and lower surfaces (or in the case of the veritcal tail, the left and right
+surfaces.)  Both the structural and aerodynamics analyses in OpenAerostruct use two-dimensional
+meshes augmented with a separate thickness variable controlled by a bsplines component. We
+take the upper and lower (or left and right) surfaces and average them to make the 2D mesh.
+
+The final code to convert the point clouds into deformed meshes is as follows:
+```
+        # VSP outputs wing outer mold lines at points along the span.
+        # Reshape to (chord, span, dimension)
+        wing_cloud = wing_cloud.reshape((45, 33, 3), order='F')
+        horiz_cloud = horiz_cloud.reshape((33, 9, 3), order='F')
+        vert_cloud = vert_cloud.reshape((33, 9, 3), order='F')
+
+        # Meshes have upper and lower surfaces, so we average the z (or y for vertical).
+        wing_pts = wing_cloud[:23, :, :]
+        wing_pts[1:-1, :, 2] = 0.5 * (wing_cloud[-2:-23:-1, :, 2] + wing_pts[1:-1, :, 2])
+        horiz_tail_pts = horiz_cloud[:17, :, :]
+        horiz_tail_pts[1:-1, :, 2] = 0.5 * (horiz_cloud[-2:-17:-1, :, 2] + horiz_tail_pts[1:-1, :, 2])
+        vert_tail_pts = vert_cloud[:17, :, :]
+        vert_tail_pts[1:-1, :, 1] = 0.5 * (vert_cloud[-2:-17:-1, :, 1] + vert_tail_pts[1:-1, :, 1])
+
+        # Reduce the mesh size for testing. (See John Jasa's recommendations in the docs.)
+        if self.options['reduced']:
+            wing_pts = wing_pts[:, ::4, :]
+            wing_pts = wing_pts[[0, 4, 8, 12, 16, 22], ...]
+            horiz_tail_pts = horiz_tail_pts[::4, ::2, :]
+            vert_tail_pts = vert_tail_pts[::4, ::2, :]
+
+        # Flip around so that FEM normals yield positive areas.
+        wing_pts = wing_pts[::-1, ::-1, :]
+        horiz_tail_pts = horiz_tail_pts[::-1, ::-1, :]
+        vert_tail_pts = vert_tail_pts[:, ::-1, :]
+
+        # outputs go here
+        outputs['wing_mesh'] = wing_pts
+        outputs['vert_tail_mesh'] = vert_tail_pts
+        outputs['horiz_tail_mesh'] = horiz_tail_pts
+```
+Both the vertical and horizontal tail are symmetric, and vsp only gives us the points on one side
+of the symmetry plane. OpenAerostruct also supports this provided we set the symmetry flag to
+True in the surface dictionary. The vertical tail lies along the symmetry line, and VSP gives us
+the entire surface.
 
 ## 4. OpenAerostruct does not directly support pluggable geometry providers.
 

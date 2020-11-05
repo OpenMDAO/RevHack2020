@@ -41,7 +41,7 @@ wing_surface = {
     # obtained from aerodynamic analysis of the surface to get
     # the total CL and CD.
     # These CL0 and CD0 values do not vary wrt alpha.
-    'CL0' : 0.0,            # CL of the surface at alpha=0
+    'CL0' : 0.5,            # CL of the surface at alpha=0
     'CD0' : 0.015,          # CD of the surface at alpha=0
 
     # Airfoil properties for viscous drag calculation
