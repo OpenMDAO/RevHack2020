@@ -39,7 +39,7 @@ Using the N2, we can see what the various inputs variables are: `dt`, `K_matrix`
 
 ### I/O: time_i -> time_i+1
 
-Again, using the N2 diagram we can find the necessary data passing: `circ_{i}`, `wake_mesh_{i}`, `sigma_x_{i}`, `disp_{i}`
+Again, using the N2 diagram we can find the necessary data passing: `circ_{i}`, `circ_wake_{i}`, `wake_mesh_{i}`, `sigma_x_{i}`, `disp_{i}`
 ![variables passed between time-steps](aero_time_vars.png)
 
 ### I/O: time loop -> after block
@@ -51,3 +51,27 @@ Lastly we have the inputs from the time-loop to the final calculation block:
 ![variables passed from time-loop to final calculations](post_block_inputs.png)
 
 
+### The model is much simpler with a for loop
+
+At the run-script level, the changes are extremely minor. 
+Commented out parts are from the non-for loop part.  
+
+```python 
+
+# Time loop
+# coupled = om.Group()
+# for t in range(num_dt):
+#     name_step = 'step_%d'%t
+#     coupled.add_subsystem(name_step,
+#                 SingleStep(num_x, num_y_sym, num_w, E, G, mrho, fem_origin, SBEIG, t),
+#                 promotes=['*'])
+
+# root.add_subsystem('coupled',
+#          coupled,
+#          promotes=['*'])
+
+root.add_subsystem('time_loop', TimeLoopComp(num_x, num_y_sym, num_w, E, G, mrho, fem_origin, SBEIG, num_dt), 
+                   promotes=['*'])
+```
+The change in the N2 is much more visible. 
+![for loop n2 diagram][aerostruct_for_loop.png]

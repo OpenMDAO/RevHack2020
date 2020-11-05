@@ -8,7 +8,7 @@ import openmdao.api as om
 from geometry import GeometryMesh, gen_crm_mesh, gen_mesh
 from materials import MaterialsTube
 from spacialbeam import SpatialBeamMatrices, SpatialBeamEIG, radii
-from timeloop import SingleStep
+from timeloop import SingleStep, TimeLoopComp
 from uvlm import UVLMFunctionals
 import warnings
 warnings.filterwarnings("ignore")
@@ -132,16 +132,19 @@ for p in range(num_of_angles):
                  promotes=['*'])
 
         # Time loop
-        coupled = om.Group()
-        for t in range(num_dt):
-            name_step = 'step_%d'%t
-            coupled.add_subsystem(name_step,
-                        SingleStep(num_x, num_y_sym, num_w, E, G, mrho, fem_origin, SBEIG, t),
-                        promotes=['*'])
+        # coupled = om.Group()
+        # for t in range(num_dt):
+        #     name_step = 'step_%d'%t
+        #     coupled.add_subsystem(name_step,
+        #                 SingleStep(num_x, num_y_sym, num_w, E, G, mrho, fem_origin, SBEIG, t),
+        #                 promotes=['*'])
 
-        root.add_subsystem('coupled',
-                 coupled,
-                 promotes=['*'])
+        # root.add_subsystem('coupled',
+        #          coupled,
+        #          promotes=['*'])
+
+        root.add_subsystem('time_loop', TimeLoopComp(num_x, num_y_sym, num_w, E, G, mrho, fem_origin, SBEIG, num_dt), 
+                           promotes=['*'])
 
         # Components after the time loop
         root.add_subsystem('vlm_funcs',
@@ -162,11 +165,9 @@ for p in range(num_of_angles):
         # prob.driver.add_recorder(om.SqliteRecorder(db_name))
 
         prob.setup()
-        om.n2(prob, outfile="aerostruct.html", show_browser=False)
+        om.n2(prob, outfile="aerostruct_for_loop.html", show_browser=False)
         st = time()
         prob.run_model()
-
-        prob.model.coupled.step_0.list_inputs(print_arrays=True, prom_name=True)
 
         print("run time", time() - st)
         print("number of steps =", num_dt)
