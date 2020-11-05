@@ -74,4 +74,4 @@ root.add_subsystem('time_loop', TimeLoopComp(num_x, num_y_sym, num_w, E, G, mrho
                    promotes=['*'])
 ```
 The change in the N2 is much more visible. 
-![for loop n2 diagram])(aerostruct_for_loop.png)
+![for loop n2 diagram](aerostruct_for_loop.png)
