@@ -90,7 +90,9 @@ component that wraps a problem.  The problem just needs to take `x` from the com
 it into the sub-problem, run the sub-problem, and return the results `y` and `z`.  To get the
 derivative, we also need to call `compute_totals` on the sub-problem, and return the derivative as
 well.
+
 ![Derivatives as Outputs](diagram_derivs_as_outputs.png)
+
 While we call `compute_totals` on the sub-problem, it is most efficient to save the derivatives we
 calculate and return them during our component's `compute_partials`. OpenMDAO cannot compute second
 derivatives, so the derivative of `dy_dx` with respect to `x` is computed by finite difference or
