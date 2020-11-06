@@ -744,4 +744,20 @@ loop over the three flight conditions and run them sequentially.
 
 Finally, we get to show results.
 
+It turns out that the optimization problem poses some challenges on its own. We were able to get
+the 150 mph flight condition to optimize successfully, but never had a succesful run with all
+three flight speeds. Note that "successfully" is relative. SNOPT reported that optimality and
+feasibility were satisfied, but is the design realistic? It is hard to say. The angle of attack
+seems high, but the other values aren't ridculous.
+
+Design Variables
+----------------
+wing_cord: 42.804
+vert_tail_area: 4439.56
+horiz_tail_area: 9886.93
+ecrm.alpha: 10.529341
+
+Objectives
+----------
+l_over_d.val: -12.91291605
 

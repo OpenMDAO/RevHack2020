@@ -173,10 +173,10 @@ Design Variables
 ----------------
 name             value         size
 ---------------  ------------  ----
-wing_cord        [0.72549972]  1
-vert_tail_area   [1.93444894]  1
-horiz_tail_area  [1.56043722]  1
-ecrm.alpha       [2.1058682]   1
+wing_cord        [42.8044836]  1
+vert_tail_area   [4439.56031]  1
+horiz_tail_area  [9886.93021]  1
+ecrm.alpha       [10.529341]   1
 
 -----------
 Constraints
