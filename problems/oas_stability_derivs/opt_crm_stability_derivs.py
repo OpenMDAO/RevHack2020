@@ -198,9 +198,9 @@ model.add_constraint('ecrm.CL', upper=1.3)
 model.add_constraint('ecrm.L_equals_W', equals=0.0)
 
 # Design Variables
-model.add_design_var('wing_cord', lower=20.0, upper=100, ref=59.0)
-model.add_design_var('vert_tail_area', lower=1000.0, ref=2295.0)
-model.add_design_var('horiz_tail_area', lower=1000.0, ref=6336.0)
+model.add_design_var('wing_cord', lower=20.0, upper=120, ref=59.0)
+model.add_design_var('vert_tail_area', lower=900.0, ref=2295.0)
+model.add_design_var('horiz_tail_area', lower=900.0, ref=6336.0)
 model.add_design_var('ecrm.alpha', lower=-2.0, upper=22.0, ref=5.0)
 
 prob.driver = om.pyOptSparseDriver()
@@ -227,7 +227,7 @@ prob.set_val('empty_cg', np.array([262.614, 0.0, 115.861]), units='cm')
 # Set Airspeeds for all models
 prob.set_val('ecrm.v', vels, units='mi/h')
 prob.set_val('ecrm.Mach_number', vels/767.0)
-prob.set_val('ecrm.alpha', np.array([3.0]))#, 7.0, 2.0]))
+prob.set_val('ecrm.alpha', np.array([10.5]))#, 7.0, 2.0]))
 
 # Initial VSP Design
 prob.set_val('wing_cord', 59.05128, units='cm')

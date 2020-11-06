@@ -567,7 +567,7 @@ The final code to convert the point clouds into deformed meshes is as follows:
 Both the vertical and horizontal tail are symmetric, and vsp only gives us the points on one side
 of the symmetry plane. OpenAerostruct also supports this provided we set the symmetry flag to
 True in the surface dictionary. The vertical tail lies along the symmetry line, and VSP gives us
-the entire surface.
+the entire surface, so the symmetry flag is False for this surface.
 
 ## 4. OpenAerostruct does not directly support pluggable geometry providers.
 
@@ -688,10 +688,48 @@ connected. These will include knowns like the design variable, but you should ve
 understand where each input comes from and why it isn't connected.
 
 ## 5. OpenAerostruct scales poorly with large mesh sizes.
-During our initial testing, we used
+During our initial testing, we were using a mesh of the wing that had four times the number of
+points as the mesh we used for optimization. While using the larger mesh, we found that computing
+the total derivatives across OpenAerostruct was unusually slow. We ultimately discovered that
+this was because the `DirectSolver` in the coupled group was solving a very large linear system.
+The linear system size is driven largely by the components that set up the Vortex Lattice problem,
+namely `GetVectors`, `EvalVelMtx`, `EvalVelocities`, each of which has an input that is the square
+of the total number of mesh coordinate values.
+
+The problem is a familiar one in OpenMDAO. When you have a complicated analysis, one valid approach
+is to break it into smaller calculations and build a component for each of these. One advantage to
+this approach is the analytical derivatives are easier to derive. The disadvantage is that it
+increases the number of OpenMDAO variables, which increases the size of the linear system that
+needs to be solved. Sometimes, you can make this more manageable by taking advantage of sparsity
+or using coloring. OpenAerostruct's derivatives do take advantage of sparsity, but it isn't
+enough for larger meshes.
+
+We investigated modifying OpenAerostruct to take the opposite approach, combining some of the
+vortex lattice preparation components into a single component. We took `GetVectors` and
+`EvalVelMtx` combined them into a single component. The derivatives for each component are
+extremely complicated sparse derivatives, and we knew that we couldn't reasonably derive analytic
+expressions for them, so we experimented with [Jax](https://github.com/google/jax), which is a
+package that provides automatic differentiation (AD) capability. It required a little rewrite
+to use, but otherwise wasn't difficult. Once implemented and working, we saw a reduction in the
+size of the linear problem, and a corresponding speedup of the direct solve. However, the cost
+was the component execution and partials computation were slower. There is a trade-off, but for
+larger mesh sizes this approach may improve performance.
+
+However, do you really need a large number of mesh points for OpenAerostruct? The answer is most
+likely no. Use a mesh appropriate for this level of fidelity. This was an interesting tangent
+though, and I think that there will be other applications where jax will come in handy.
 
 ## 6. Multiple VSP instances can't run in the same model.
 
+Our original implementation of the optimization problem had three separate components for the
+three flight conditions. However, when we tried to run the model, VSP would crash when it got
+to the second component, and raise an error about triangle with zero area. We concluded that
+the code is probably unable to run multiple instances in the same process. We did not investigate
+whether you could run them in different processes (e.g., under mpi), but we suspect that
+would work.
+
+To get around this problem, we vectorized a few of the variables so that the ECRM component could
+loop over the three flight conditions and run them sequentially.
 
 # Solution
 
