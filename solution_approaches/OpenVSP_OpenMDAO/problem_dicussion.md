@@ -220,6 +220,15 @@ OpenMDAO can handle mixed-operation where some derivatives are analytic and some
 difference. Note also that, if your model supports it, you can use complex step here for
 better accuracy.  We cannot because of OpenVSP.
 
+This leads in to why we chose to include OpenVSP in the sub-problem. OpenVSP passes three deformed
+meshes into the rest of OpenAerostruct. If we slpit the model there, then this component would no
+longer have the three geometric design inputs, but would instead have 3 mesh inputs. We would
+need to compute the derivatives of the stability derivatives with respect to every mesh coordinate
+point, which would require many finite difference steps and be very time consuming. With VSP
+included inside the sub-problem, we only have three geometry inputs to finite difference. You
+need to consider this when building your sub-problems. Sometimes you can gain efficiency by pulling
+more of your problem down into the sub-problem.
+
 Next up is the compute function.
 ```
     def compute(self, inputs, outputs):
@@ -733,6 +742,6 @@ loop over the three flight conditions and run them sequentially.
 
 # Solution
 
-## 7. It is important to correctly set all inputs values for OpenAerostruct.
+Finally, we get to show results.
 
-## 8. The optimization problem has its own challenges.
+
