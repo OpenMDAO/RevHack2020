@@ -742,7 +742,7 @@ loop over the three flight conditions and run them sequentially.
 
 # Solution
 
-Finally, we get to show results.
+Finally, we get to show results.  Kind of.
 
 It turns out that the optimization problem poses some challenges on its own. We were able to get
 the 150 mph flight condition to optimize successfully, but never had a succesful run with all
@@ -751,13 +751,13 @@ feasibility were satisfied, but is the design realistic? It is hard to say. The 
 seems high, but the other values aren't ridculous.
 
 Design Variables
-----------------
-wing_cord: 42.804
-vert_tail_area: 4439.56
-horiz_tail_area: 9886.93
-ecrm.alpha: 10.529341
+* wing_cord: 42.804
+* vert_tail_area: 4439.56
+* horiz_tail_area: 9886.93
+* ecrm.alpha: 10.529341
 
 Objectives
-----------
-l_over_d.val: -12.91291605
+* l_over_d.val: -12.91291605
+
+
 
