@@ -221,7 +221,7 @@ difference. Note also that, if your model supports it, you can use complex step 
 better accuracy.  We cannot because of OpenVSP.
 
 This leads in to why we chose to include OpenVSP in the sub-problem. OpenVSP passes three deformed
-meshes into the rest of OpenAerostruct. If we slpit the model there, then this component would no
+meshes into the rest of OpenAerostruct. If we split the model there, then this component would no
 longer have the three geometric design inputs, but would instead have 3 mesh inputs. We would
 need to compute the derivatives of the stability derivatives with respect to every mesh coordinate
 point, which would require many finite difference steps and be very time consuming. With VSP
@@ -745,10 +745,10 @@ loop over the three flight conditions and run them sequentially.
 Finally, we get to show results.  Kind of.
 
 It turns out that the optimization problem poses some challenges on its own. We were able to get
-the 150 mph flight condition to optimize successfully, but never had a succesful run with all
+the 150 mph flight condition to optimize successfully, but never had a successful run with all
 three flight speeds. Note that "successfully" is relative. SNOPT reported that optimality and
 feasibility were satisfied, but is the design realistic? It is hard to say. The angle of attack
-seems high, but the other values aren't ridculous.
+seems high, but the other values aren't ridiculous.
 
 Design Variables
 * wing_cord: 42.804

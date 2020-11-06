@@ -37,7 +37,7 @@ In total, less than 800 lines of code that included the ODE, the time integratio
 The time-step style time integration meant the original implementation used an approach that optimal-control folks call a "shooting method" and MDO folks call "MDF". 
 
 The original implementation took about 25 minutes to run.
-Thats not that long, and certainly well within what most people would consider reasonable time frame for optimization. 
+That's not that long, and certainly well within what most people would consider reasonable time frame for optimization. 
 
 
 # Keep the ODE and the integration separate
@@ -251,7 +251,7 @@ Then, given that control schedule the entire time history is simulated out and t
 We can relate this in the MDO context to the Multidisciplinary Design Feasible (MDF) architecture. 
 Normally MDF implies that some sort of solver is in place converging governing equations, and that the optimizer is being shown a **continuous feasible space** where those governing equations are solved. 
 
-What are the governing equations in the context of an Euler intgration, and what are the associated state variables? 
+What are the governing equations in the context of an Euler integration, and what are the associated state variables? 
 The state variables are the collection of discrete values that represent the state-time-history of your system. 
 If you were modeling a simple cannonball problem, you might have 2 states: x and y. 
 If you took 10 time steps then you'd have 10 state variables for x and 10 for y. 

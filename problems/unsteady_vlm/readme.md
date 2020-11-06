@@ -9,7 +9,7 @@ of the time-varying states for each time instance inside an OpenMDAO model.
 
 # Structure of an unsteady problem
 
-As Giovanni Pesare points out in his thesis, an unstead problem is made up of three parts: 
+As Giovanni Pesare points out in his thesis, an unsteady problem is made up of three parts: 
 
 1) A block of computations before the unsteady part
 2) The unsteady part
@@ -18,7 +18,7 @@ As Giovanni Pesare points out in his thesis, an unstead problem is made up of th
 ![n2 diagram of the unsteady vlm](aerostruct.png)
 
 In this code, we can see that the before block includes the groups named `tube`, `mesh`, `matricies`, and `eig`. 
-The entire unsteady block is contained inside the `coupled` group (thats a weird name for that group since nothing is coupled, but we wanted to change the code as little as possible so we left it.)
+The entire unsteady block is contained inside the `coupled` group (that's a weird name for that group since nothing is coupled, but we wanted to change the code as little as possible so we left it.)
 The after block is contained in the `vlm_funcs` group. 
 
 The waterfall nature of this time loop clearly shows up in the N2 diagram above where each time step feeds directly into the next. 
@@ -78,7 +78,7 @@ The waterfall of time steps is now gone.
 ![for loop n2 diagram](aerostruct_for_loop.png)
 
 You can see the full code to make this work [here](./timeloop.py) in the `TimeLoop` class. 
-The key bit is here, where you should notice that the for-loop that was commented out of the run-script has been transfered into the run and there are now a set of sub-problems. 
+The key bit is here, where you should notice that the for-loop that was commented out of the run-script has been transferred into the run and there are now a set of sub-problems. 
 
 ```python
 def compute(self, inputs, outputs): 

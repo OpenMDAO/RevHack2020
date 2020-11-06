@@ -29,10 +29,10 @@ Given the weak coupling, we can reasonably guess that using sub-optimization wil
 There isn't a single answer to this in general. 
 We can look at the specific case of the problem posed by John Jasa, involving computing the power curve for a wind turbine. 
 
-There is one component that does the nested-optimization (i.e. no groups, connectection, etc). Also the sub-optimization in this case uses finite differences for derivatives, and in the spirit of the problem given we assumed it would stay that way. So you wouldn't get the benefit of the analytic derivatives, and there is no other features of OpenMDAO being used in the sub-optimization... hence there isn't a lot of value in it. 
+There is one component that does the nested-optimization (i.e. no groups, connection, etc). Also the sub-optimization in this case uses finite differences for derivatives, and in the spirit of the problem given we assumed it would stay that way. So you wouldn't get the benefit of the analytic derivatives, and there is no other features of OpenMDAO being used in the sub-optimization... hence there isn't a lot of value in it. 
 Also, there is just less code without the sub-problem. 
 
-You can see how things line up against it in this case. If you wanted to switch to analtyic derivatives, or if your sub-problem involved more anlyses that were coupled together then you'd probably be better off with a sub-problem. 
+You can see how things line up against it in this case. If you wanted to switch to analytic derivatives, or if your sub-problem involved more analyses that were coupled together then you'd probably be better off with a sub-problem. 
 
 ## Code with out a sub-problem: 
 
@@ -211,7 +211,7 @@ and if you are in a situation where you're not happy with the answer from your s
 * [Nested optimization with a sub-problem](./run_sequential_opt_using_subproblem.py)
 * [Sequential Optimization with sub-problem](./run_sequential_opt_using_subproblem.py)
 
-## Component impelmentations for the nested optimization
+## Component implementations for the nested optimization
 * [sub-problem](./components/compute_pitch_angles_using_subproblem.py)
 * [Original solution given by John Jasa](./components/compute_pitch_angles.py)
 * [Solver based approach](./components/compute_pitch_angles_solver.py)
@@ -239,10 +239,10 @@ Another option would be to use OpenMDAO’s pyOptSparseDriver which lets you use
 
 # A theoretical discussion on nested optimizations
 
-## You can think of nested optimization as a form of Multi Disciplinary Feasbile (MDF) architecture
+## You can think of nested optimization as a form of Multi Disciplinary Feasible (MDF) architecture
 
 The MDF architecture is typically thought of in terms of converging the governing equations for your analysis with a solver. 
-Thats an overly specific interpretation though. 
+That's an overly specific interpretation though. 
 More generally, MDF removes degrees of freedom from the top level problem by handing them to a well behaved sub-solver. 
 
 If that sub-solver happens to be a nonlinear solver and the degrees of freedom happen to be state variables for your analysis then you get the traditional view of MDF. 

@@ -21,7 +21,7 @@ Id like to share the details we considered about the issue anyway, because they 
 * The code itself is about 1200 lines, and 6800 lines of that is for tests (are you surprised by that split? it takes a lot of effort to build a reliable test suite!)
 * The [Driver base class](https://github.com/OpenMDAO/OpenMDAO/blob/2186adb1ba66e0babaad8d2e6c7da071e1c6e973/openmdao/core/driver.py) adds another 1200 lines of code (its located in the `core` module) and 1000 lines of test code. 
 * As of V3.4, there are 5 drivers: [ScipyOptimizeDriver][scipy-driver], [pyOptSparseDriver][pyopt-driver], [SimpleGADriver][simple-ga], [DifferentialEvolutionDriver][di-ga], [DOEDriver][doe-driver]
-* OpenMDAO devs developed an pluging (i.e. not in the main repo) experimental mixed integer optimizer called [AMIEGO](https://github.com/Kenneth-T-Moore/AMIEGO)
+* OpenMDAO devs developed an plugin (i.e. not in the main repo) experimental mixed integer optimizer called [AMIEGO](https://github.com/Kenneth-T-Moore/AMIEGO)
 * National Renewable Energy Lab (NREL) built a plugin with a [driver for NL-Opt](https://github.com/johnjasa/nrel_openmdao_extensions)
 * [Onera users built a plugin](https://github.com/OneraHub/openmdao_extensions) with several additional drivers for design of experiments and surrogate based optimization
 
@@ -52,7 +52,7 @@ Why so much extra complexity?
 Mostly this comes down to the need for supporting more advanced use cases. 
 Yes, for "simple" optimizations (again, referring the relative complexity of the optimization formulations)  
 you can have very compact run-scripts. 
-However, if you want to set up a big problem that has a sparse jacobian, uses MPI paralellelism, has linear constraints, relies on derivative coloring schemes, or includes detailed data recording and debugging features then you'll find that your run script grows pretty quickly. 
+However, if you want to set up a big problem that has a sparse jacobian, uses MPI parallelism, has linear constraints, relies on derivative coloring schemes, or includes detailed data recording and debugging features then you'll find that your run script grows pretty quickly. 
 
 I think it's easy to discount the slow creeping complexity growth of a run-script, especially if you're the only one working on that script. 
 However, when ALL of the problems your solving are big, complex, optimizations that are changing all the time... the complexity of the drivers starts to make a lot more sense and add a lot more value. 
@@ -77,7 +77,7 @@ That means the dev team would at least need our own internal Driver-like tools f
 
 ## Drivers are not going away. 
 
-Desipite there being some problems with drivers, on balance they offer a lot of value. 
+Despite there being some problems with drivers, on balance they offer a lot of value. 
 I wish there was a better way to offer the broad feature set and generality without all the complexity, but as of now I don't see one. 
 The devs can't take on the responsibility of maintaining drivers for every optimization package, but we also don't think that you have to have a driver for your library of choice to use OpenMDAO. 
 If you are willing to sacrifice the generality, then a lot of the Driver complexity isn't needed. 
