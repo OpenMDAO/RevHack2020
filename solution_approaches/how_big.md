@@ -153,7 +153,7 @@ Here was a case where derivative computation costs dominated, and we were able t
 ## Recommendation: start-small to learn, but go big for production code 
 
 We think that code is easier to read/debug if you make fewer larger components, and we would like to move more of our own code in that direction. 
-So thats what we'll recommend to you as well. 
+So that's what we'll recommend to you as well. 
 Tend toward larger components with more calculations aggregated into a single `compute` method. 
 
 The major challenge with larger components it that they become much hard to provide derivatives for by hand. 

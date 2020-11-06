@@ -4,7 +4,7 @@
 RevHack is a reverse hackathon where the OM users propose problems to be solved and then the dev team tries to solve them! 
 The primary dev team goal is to gain a better understanding of the use cases that users are struggling with, and to learn to see our framework through your eyes. 
 
-What you get out of it is two fold: 
+What you get out of it is two-fold: 
 1) We solves some problems for you 
 2) We go into detail about our thought process and justifications for how we solved them, so you can learn something about how we see things. 
  

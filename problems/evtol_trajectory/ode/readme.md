@@ -1,7 +1,7 @@
 # Conversion of the original ODE to a Dymos-Compatible ODE
 
 In the original request, the user wants to know how to implement their problem in Dymos.
-The problem, as posed, uses a simple Euler-step integration to propagate the dyanmics from one time-step to the next.
+The problem, as posed, uses a simple Euler-step integration to propagate the dynamics from one time-step to the next.
 
 ## Composing the Ordinary Differential Equations (ODE)
 

@@ -1,6 +1,6 @@
 # OpenMDAO Driver for CMA-ES optimizer
 
-The CMA-ES (Covariance Matrix Adaptation Evolution Strategy) is an evolutionary algorithm for difficult non-linear non-convex black-box optimisation problems in continuous domain... 
+The CMA-ES (Covariance Matrix Adaptation Evolution Strategy) is an evolutionary algorithm for difficult non-linear non-convex black-box optimization problems in continuous domain... 
 
 * [INRIA reference site](http://cma.gforge.inria.fr)
 

@@ -102,7 +102,7 @@ On the other hand, setting this option to `False` means that we use two  separat
 Constraints are then imposed within the optimizer to ensure that, upon a successful optimization, those two values are identical.
 Continuity of state and control values is achieved in the optimized solution, but during the search the segments are free to be discontinuous.
 This can help the optimizer exit local extrema in some situations.
-For Dymos, using a non-compressed transcirption with `solve_segments=True` also means that the solver propagates each segment individually from a presumed initial state value.
+For Dymos, using a non-compressed transcription with `solve_segments=True` also means that the solver propagates each segment individually from a presumed initial state value.
 In this way, we can toggle whether  Dymos uses single or multiple-shooting when `solve_segments` is used.
 For the sake of getting a fully propagated trajectory with `run_model` when using `solve_segments`, we should use `compressed=True`.
 Otherwise performance is sometimes better when `compressed=False`.

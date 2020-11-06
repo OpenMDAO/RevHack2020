@@ -5,7 +5,7 @@ You should definitely check this out, because it has a lot of features like mult
 Dymos uses an implicit pseudo-spectral time integration approach that requires you to keep all times in memory at once. 
 
 However, there is another time integration approach that you may be more familiar with. 
-time-stepping schemes like Euler, trapazoidal, and RK4 use a for-loop like structure to cascade the states through time on step at a time. Something like this: 
+time-stepping schemes like Euler, trapezoidal, and RK4 use a for-loop like structure to cascade the states through time on step at a time. Something like this: 
 
 
 ## Two fundamental options for unsteady analysis
@@ -89,7 +89,8 @@ These solutions found the same answer as the original waterfall style solution, 
 
 ### What about a time-stepping solution
 
-This one was really a mixed bag for the dev team.  
+This one was really a mixed bag for the dev team.
+
 On the one hand, we don't feel like the approach that Shamsheer took in his original implementation is the right one. 
 He build the Euler for loop into his component which, while simpler and more compact, couples the code for the time integration to the ODE itself. 
 Our objection lies in that coupling, because we feel it prevents you from growing into more efficient integration methods later on. 
