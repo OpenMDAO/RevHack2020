@@ -84,7 +84,7 @@ OpenMDAO doesn't have an "automatic" way to place problems into models. To do th
 an `ExplicitComponent` that contains the subproblem and manages the passing of data. This isn't
 as difficult as it sounds, and is one of the primary focuses that is documented in this solution.
 
-(Simple explanation with diagram goes here.)
+![Derivatives as Outputs](diagram_derivs_as_outputs.png)
 
 For our aircraft case, we want to compute and constrain the derivatives of aerodynamic variables with
 resepct to alpha and beta. This means we need to encapsulate OpenAerostruct in the sub-problem.
