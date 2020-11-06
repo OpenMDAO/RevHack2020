@@ -56,9 +56,9 @@ class ECRM(om.ExplicitComponent):
         self.add_input('Mach_number', val=0.1 * np.ones(num_nodes))
 
         # VSP Geometry Parameters
-        self.add_input('wing_cord', val=59.05128, units='inch')
-        self.add_input('vert_tail_area', val=2295., units='inch**2')
-        self.add_input('horiz_tail_area', val=6336., units='inch**2')
+        self.add_input('wing_cord', val=59.05128, units='cm')
+        self.add_input('vert_tail_area', val=2295., units='cm**2')
+        self.add_input('horiz_tail_area', val=6336., units='cm**2')
 
         # Constant Inputs
         self.add_input('beta', val=0.0, units='deg')
@@ -69,7 +69,7 @@ class ECRM(om.ExplicitComponent):
         self.add_input('W0', val=2000.0,  units='kg')
         self.add_input('speed_of_sound', val=295.4, units='m/s')
         self.add_input('load_factor', val=1.)
-        self.add_input('empty_cg', np.array([262.614, 0.0, 115.861]), units='inch')
+        self.add_input('empty_cg', np.array([262.614, 0.0, 115.861]), units='cm')
 
         # Outputs
         self.add_output('CL', np.zeros(num_nodes))
@@ -127,7 +127,7 @@ class ECRM(om.ExplicitComponent):
             indep_var_comp.add_output('W0', val=2000.0,  units='kg')
             indep_var_comp.add_output('speed_of_sound', val=295.4, units='m/s')
             indep_var_comp.add_output('load_factor', val=1.)
-            indep_var_comp.add_output('empty_cg', val=np.array([262.614, 0.0, 115.861]), units='inch')
+            indep_var_comp.add_output('empty_cg', val=np.array([262.614, 0.0, 115.861]), units='cm')
 
             prob.model.add_subsystem('prob_vars', indep_var_comp, promotes=['*'])
 
@@ -178,16 +178,17 @@ class ECRM(om.ExplicitComponent):
         prob.set_val('load_factor', inputs['load_factor'])
         prob.set_val('empty_cg', inputs['empty_cg'])
 
+        # Design inputs don't vary over cases.
+        prob.set_val('wing_cord', inputs['wing_cord'])
+        prob.set_val('vert_tail_area', inputs['vert_tail_area'])
+        prob.set_val('horiz_tail_area', inputs['horiz_tail_area'])
+
         for j in range(num_nodes):
 
             # Set new design values.
             prob.set_val('v', inputs['v'][j])
             prob.set_val('alpha', inputs['alpha'][j])
             prob.set_val('Mach_number', inputs['Mach_number'][j])
-
-            prob.set_val('wing_cord', inputs['wing_cord'])
-            prob.set_val('vert_tail_area', inputs['vert_tail_area'])
-            prob.set_val('horiz_tail_area', inputs['horiz_tail_area'])
 
             # Run Problem
             prob.run_model()

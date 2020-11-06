@@ -41,7 +41,7 @@ wing_surface = {
     # obtained from aerodynamic analysis of the surface to get
     # the total CL and CD.
     # These CL0 and CD0 values do not vary wrt alpha.
-    'CL0' : 0.0,            # CL of the surface at alpha=0
+    'CL0' : 0.5,            # CL of the surface at alpha=0
     'CD0' : 0.015,          # CD of the surface at alpha=0
 
     # Airfoil properties for viscous drag calculation
@@ -217,7 +217,7 @@ prob.set_val('R', 50, units='km')
 prob.set_val('W0', 1000.0,  units='kg')
 prob.set_val('load_factor', 1.)
 prob.set_val('speed_of_sound', 767.0, units='mi/h')
-prob.set_val('empty_cg', np.array([262.614, 0.0, 115.861]), units='inch')
+prob.set_val('empty_cg', np.array([262.614, 0.0, 115.861]), units='cm')
 
 # Set Initial Conditions 150 mph model
 prob.set_val('ecrm_150.v', 150.0, units='mi/h')

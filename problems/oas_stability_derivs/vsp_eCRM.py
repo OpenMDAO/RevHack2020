@@ -41,20 +41,20 @@ class VSPeCRM(om.ExplicitComponent):
         self.horiz_tail_id = vsp.FindGeomsWithName(horiz_tail_name)[0]
         self.vert_tail_id = vsp.FindGeomsWithName(vert_tail_name)[0]
 
-        self.add_input('wing_cord', val=59.05128,)
-        self.add_input('vert_tail_area', val=2295.)
-        self.add_input('horiz_tail_area', val=6336.)
+        self.add_input('wing_cord', units='cm', val=59.05128,)
+        self.add_input('vert_tail_area', units='cm**2', val=2295.)
+        self.add_input('horiz_tail_area', units='cm**2', val=6336.)
 
         # Shapes are pre-determined.
         if reduced:
-            self.add_output('wing_mesh', shape=(6, 9, 3), units='inch')
-            self.add_output('vert_tail_mesh', shape=(5, 5, 3), units='inch')
-            self.add_output('horiz_tail_mesh', shape=(5, 5, 3), units='inch')
+            self.add_output('wing_mesh', shape=(6, 9, 3), units='cm')
+            self.add_output('vert_tail_mesh', shape=(5, 5, 3), units='cm')
+            self.add_output('horiz_tail_mesh', shape=(5, 5, 3), units='cm')
         else:
             # Note: at present, OAS can't handle this size.
-            self.add_output('wing_mesh', shape=(23, 33, 3), units='inch')
-            self.add_output('vert_tail_mesh', shape=(33, 9, 3), units='inch')
-            self.add_output('horiz_tail_mesh', shape=(33, 9, 3), units='inch')
+            self.add_output('wing_mesh', shape=(23, 33, 3), units='cm')
+            self.add_output('vert_tail_mesh', shape=(33, 9, 3), units='cm')
+            self.add_output('horiz_tail_mesh', shape=(33, 9, 3), units='cm')
 
         self.declare_partials(of='*', wrt='*', method='fd')
 
