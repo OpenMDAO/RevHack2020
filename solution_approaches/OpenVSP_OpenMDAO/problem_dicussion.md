@@ -757,7 +757,30 @@ Design Variables
 * ecrm.alpha: 10.529341
 
 Objectives
-* l_over_d.val: -12.91291605
+* l_over_d.val: 12.91291605
+
+Some of the difficulty in finding feasible designs in the full optimization may stem from the wing
+dihedral. Parameter studies showed that the yawing moment due to sideslip was unstable over the
+mid-range of angles of attack from around 3 or 4 degrees up until around 11 degrees for a large
+region of the geometric design space. This may be the reason that we could find a solution for
+a single velocity (150 mph), since it could find a design that worked at a single angle of attack,
+but for all three speeds, where you need three different angle of attacks, it couldn't find
+a design that satisfied even two sets of constraints.
+
+The lift equals weight constraint was difficult to satisfy in the earliest runs, until we used it
+to tune the values for CL at zero angle of attack (and also the weight of the rest of the aircraft,
+since neither values were really available.)
+
+Beyond those issues, there still are a number of inputs where we are unsure whether we have the
+right value, and there is definitely a possibility that one or more settings are wrong. Still, I
+feel that this exercise has been completed in spirit. We've shown that this problem can be solved
+in OpenMDAO with the tools requested, and now just needs to be handed off to a more experienced
+aircraft designer.
+
+The file "opt_crm_stability_derivs.py" can be used to run the optimization. It is currently set to
+run just one flight condition, which was the latest successful optimization. If you don't have
+SNOPT, you will need to change the optimizer to SLSQP or another available gradient optimizer,
+but results will vary.
 
 
 
