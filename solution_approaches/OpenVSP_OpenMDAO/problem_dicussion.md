@@ -43,7 +43,7 @@ Installing vsp is covered in this [document.](openmdao_with_vsp.md)
 
 **OpenAerostruct**
 
-OpenAerostruct can be installed by cloning the repo and installing it into an activated OpenMDAO
+OpenAerostruct can be installed by cloning the repository and installing it into an activated OpenMDAO
 environment following the instructions they give.
 
 There is a bug in the existing version of OpenAerostruct where beta (sideslip angle) is not
@@ -54,7 +54,7 @@ the conclusion of the reverse-hackathon.
 
 In the proposed optimization problem, we want to apply constraints to stability derivatives. The
 stability derivatives that we need are the derivatives of aerodynamic forces with respect to angle
-of attack (alpha) and sidesplip angle (beta).  OpenMDAO can compute these derivatives, however
+of attack (alpha) and sideslip angle (beta).  OpenMDAO can compute these derivatives, however
 there is no way to use the derivatives inside of a model. Moreover, to use a derivative as a constraint,
 you also need its derivatives, which are the second derivatives of the aero forces with respect
 to alpha and beta. The way to accomplish this in OpenMDAO is to use a nested Problem.
@@ -66,10 +66,10 @@ to alpha and beta. The way to accomplish this in OpenMDAO is to use a nested Pro
 This problem was proposed to the workshop in order to answer the question of how to compute
 total derivatives of part of your model and use them for later calculation in OpenMDAO. To be
 completely flexible, these derivatives need to be an output of some kind of component so that
-they can be used as inputs to other components or declared as constraint sources. However, whenver
+they can be used as inputs to other components or declared as constraint sources. However, whenever
 an output is provided in OpenMDAO, the component that computes it must also be able to provide
 partial derivatives of that input with respect to component inputs. So, even if we could somehow
-piggyback on the full-model total derivatives capbility to compute the derivatives of a sub-model
+piggyback on the full-model total derivatives capability to compute the derivatives of a sub-model
 and provide them as outputs, we would still need to compute second derivatives, and OpenMDAO
 does not provide those at this time.
 
@@ -84,10 +84,20 @@ OpenMDAO doesn't have an "automatic" way to place problems into models. To do th
 an `ExplicitComponent` that contains the subproblem and manages the passing of data. This isn't
 as difficult as it sounds, and is one of the primary focuses that is documented in this solution.
 
+For a simple example, consider a component that takes `x` and computes `y` and `z`. We also want to
+compute `dy_dx` and use it in OpenMDAO.  If we take the subproblem approach, then we create a
+component that wraps a problem.  The problem just needs to take `x` from the component inputs, pass
+it into the sub-problem, run the sub-problem, and return the results `y` and `z`.  To get the
+derivative, we also need to call `compute_totals` on the sub-problem, and return the derivative as
+well.
 ![Derivatives as Outputs](diagram_derivs_as_outputs.png)
+While we call `compute_totals` on the sub-problem, it is most efficient to save the derivatives we
+calculate and return them during our component's `compute_partials`. OpenMDAO cannot compute second
+derivatives, so the derivative of `dy_dx` with respect to `x` is computed by finite difference or
+complex step.
 
 For our aircraft case, we want to compute and constrain the derivatives of aerodynamic variables with
-resepct to alpha and beta. This means we need to encapsulate OpenAerostruct in the sub-problem.
+respect to alpha and beta. This means we need to encapsulate OpenAerostruct in the sub-problem.
 While we technically don't need the geometry to be included in the subproblem, since it is not
 involved in the calculation of the stability derivatives, we included it because it is more
 computationally efficient, as will be explained later.  Wrapping OpenVSP and incorporating it
@@ -264,7 +274,7 @@ and OpenAerostruct. Then we call setup.
                 prob.model.connect(f'geo.{name}.local_stiff_transformed', f'aero.coupled.{name}.local_stiff_transformed')
                 prob.model.connect(f'geo.{name}.nodes', f'aero.coupled.{name}.nodes')
 
-                # Connect aerodyamic mesh to coupled group mesh
+                # Connect aerodynamic mesh to coupled group mesh
                 prob.model.connect(f'geo.{name}_mesh', f'aero.coupled.{name}.mesh')
 
                 # Connect performance calculation variables
@@ -452,7 +462,7 @@ class VSPeCRM(om.ExplicitComponent):
 The geometry file is read in during setup. Notice that this component will use finite difference
 to calculate its partial derivatives. OpenVSP does not provide analytic derivatives and does not
 support complex inputs, so fd is the only option.  VSP runs pretty quickly, and the component only
-has three inputs, so the derivative computation won't be a bottlneck. Also, the rest of
+has three inputs, so the derivative computation won't be a bottleneck. Also, the rest of
 OpenAerostruct will continue to use analytic derivatives.
 
 Next is the `compute` method:
@@ -508,15 +518,15 @@ dimensions.
 
 The OpenVSP meshes are also too large for OpenAerostruct to effectively handle. The reason for
 this will be discussed further below, but it is also important to recognize that the level of
-fidelity for the vortex lattice and simple structural solver are mor conducive to smaller mesh
+fidelity for the vortex lattice and simple structural solver are more conducive to smaller mesh
 sizes. We reduce the number of mesh points by taking every second or fourth point where symmetry
 allows. We had to skip a point near the back of the wing because the mesh couldn't be subdivided
 by four in that direction.
 
 Finally, the VSP surface is actually 3-dimensional, and the point cloud includes the points on
-both the upper and lower surfaces (or in the case of the veritcal tail, the left and right
+both the upper and lower surfaces (or in the case of the vertical tail, the left and right
 surfaces.)  Both the structural and aerodynamics analyses in OpenAerostruct use two-dimensional
-meshes augmented with a separate thickness variable controlled by a bsplines component. We
+meshes augmented with a separate thickness variable controlled by a b-splines component. We
 take the upper and lower (or left and right) surfaces and average them to make the 2D mesh.
 
 The final code to convert the point clouds into deformed meshes is as follows:
